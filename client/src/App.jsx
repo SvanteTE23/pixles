@@ -40,6 +40,15 @@ function App() {
 
   const isDragging = useRef(false);
   const lastMousePos = useRef({ x: 0, y: 0 });
+  
+  // Touch handling refs
+  const touchState = useRef({
+    lastDist: 0,
+    lastCenter: null,
+    isPinching: false,
+    isDragging: false,
+    lastTouchPos: null
+  });
 
   const canvasRef = useRef(null);
   const socketRef = useRef(null);
@@ -129,6 +138,21 @@ function App() {
     };
   }, []);
 
+  const placePixel = (clientX, clientY) => {
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+
+    const x = Math.floor((clientX - rect.left) * scaleX / PIXEL_SIZE);
+    const y = Math.floor((clientY - rect.top) * scaleY / PIXEL_SIZE);
+
+    if (x >= 0 && x < CANVAS_SIZE && y >= 0 && y < CANVAS_SIZE) {
+      socketRef.current.emit('place_pixel', { x, y, color: selectedColor });
+    }
+  };
+
   const handleCanvasClick = (e) => {
     // Only allow left click for painting
     if (e.button !== 0) return;
@@ -136,17 +160,98 @@ function App() {
     // If we were dragging (panning), don't paint
     if (isDragging.current) return;
 
-    const canvas = canvasRef.current;
-    const rect = canvas.getBoundingClientRect();
-    
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
+    placePixel(e.clientX, e.clientY);
+  };
 
-    const x = Math.floor((e.clientX - rect.left) * scaleX / PIXEL_SIZE);
-    const y = Math.floor((e.clientY - rect.top) * scaleY / PIXEL_SIZE);
+  // Touch Handlers
+  const getTouchDistance = (touches) => {
+    return Math.hypot(
+      touches[0].clientX - touches[1].clientX,
+      touches[0].clientY - touches[1].clientY
+    );
+  };
 
-    if (x >= 0 && x < CANVAS_SIZE && y >= 0 && y < CANVAS_SIZE) {
-      socketRef.current.emit('place_pixel', { x, y, color: selectedColor });
+  const getTouchCenter = (touches) => {
+    return {
+      x: (touches[0].clientX + touches[1].clientX) / 2,
+      y: (touches[0].clientY + touches[1].clientY) / 2
+    };
+  };
+
+  const handleTouchStart = (e) => {
+    if (e.touches.length === 1) {
+      touchState.current.isDragging = true;
+      touchState.current.lastTouchPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      touchState.current.startTouchPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      touchState.current.hasMoved = false;
+    } else if (e.touches.length === 2) {
+      touchState.current.isPinching = true;
+      touchState.current.lastDist = getTouchDistance(e.touches);
+      touchState.current.lastCenter = getTouchCenter(e.touches);
+    }
+  };
+
+  const handleTouchMove = (e) => {
+    e.preventDefault(); // Prevent scrolling
+
+    if (touchState.current.isPinching && e.touches.length === 2) {
+      const dist = getTouchDistance(e.touches);
+      const center = getTouchCenter(e.touches);
+      const currentTarget = targetTransform.current;
+
+      // Calculate zoom
+      const scale = dist / touchState.current.lastDist;
+      const newZoom = Math.min(Math.max(0.1, currentTarget.zoom * scale), 10);
+
+      // Calculate pan to keep center stationary relative to screen
+      const rect = containerRef.current.getBoundingClientRect();
+      const relCenterX = center.x - rect.left;
+      const relCenterY = center.y - rect.top;
+      
+      const worldX = (relCenterX - currentTarget.x) / currentTarget.zoom;
+      const worldY = (relCenterY - currentTarget.y) / currentTarget.zoom;
+      
+      const dx = center.x - touchState.current.lastCenter.x;
+      const dy = center.y - touchState.current.lastCenter.y;
+
+      const newOffsetX = relCenterX - worldX * newZoom + dx;
+      const newOffsetY = relCenterY - worldY * newZoom + dy;
+
+      targetTransform.current = { zoom: newZoom, x: newOffsetX, y: newOffsetY };
+      
+      touchState.current.lastDist = dist;
+      touchState.current.lastCenter = center;
+
+    } else if (touchState.current.isDragging && e.touches.length === 1) {
+      const dx = e.touches[0].clientX - touchState.current.lastTouchPos.x;
+      const dy = e.touches[0].clientY - touchState.current.lastTouchPos.y;
+
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+        touchState.current.hasMoved = true;
+      }
+
+      targetTransform.current.x += dx;
+      targetTransform.current.y += dy;
+      
+      // Instant update for responsiveness
+      currentTransform.current.x += dx;
+      currentTransform.current.y += dy;
+      setOffset({ x: currentTransform.current.x, y: currentTransform.current.y });
+
+      touchState.current.lastTouchPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    }
+  };
+
+  const handleTouchEnd = (e) => {
+    if (!touchState.current.hasMoved && !touchState.current.isPinching && e.changedTouches.length === 1 && touchState.current.isDragging) {
+      // It's a tap!
+      const touch = e.changedTouches[0];
+      placePixel(touch.clientX, touch.clientY);
+    }
+
+    if (e.touches.length === 0) {
+      touchState.current.isDragging = false;
+      touchState.current.isPinching = false;
     }
   };
 
@@ -229,6 +334,9 @@ function App() {
         onMouseDown={handleMouseDown}
         onMouseUp={handleMouseUp}
         onMouseMove={handleMouseMove}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
         onContextMenu={(e) => e.preventDefault()} // Prevent context menu
       >
         <div 

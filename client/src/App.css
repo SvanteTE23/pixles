@@ -13,6 +13,7 @@
   overflow: hidden;
   cursor: grab;
   background-color: #e5e5e5;
+  touch-action: none; /* Prevent browser handling of gestures */
 }
 
 .viewport:active {
@@ -206,6 +207,39 @@
 .color-picker::-webkit-color-swatch {
   border: 2px solid rgba(0,0,0,0.1);
   border-radius: 12px;
+}
+
+@media (max-width: 600px) {
+  .controls-bar {
+    width: 95%;
+    padding: 8px 12px;
+    bottom: 16px;
+    gap: 8px;
+  }
+
+  .color-presets {
+    gap: 8px;
+  }
+
+  .color-preset {
+    width: 32px;
+    height: 32px;
+  }
+
+  .color-picker-wrapper {
+    padding-left: 8px;
+    gap: 8px;
+  }
+  
+  .add-color-btn {
+    width: 32px;
+    height: 32px;
+  }
+  
+  .color-picker {
+    width: 36px;
+    height: 36px;
+  }
 }
 
 

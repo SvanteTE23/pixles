@@ -37,6 +37,7 @@ function App() {
   
   const [hoveredPixel, setHoveredPixel] = useState(null);
   const [animatingPixels, setAnimatingPixels] = useState([]);
+  const [isEyedropperActive, setIsEyedropperActive] = useState(false);
 
   const isDragging = useRef(false);
   const lastMousePos = useRef({ x: 0, y: 0 });
@@ -70,7 +71,7 @@ function App() {
 
       if (Math.abs(zoomDiff) > 0.0001 || Math.abs(xDiff) > 0.1 || Math.abs(yDiff) > 0.1) {
         // Lerp factor for zoom - adjust for smoothness
-        const t = 0.1; 
+        const t = 0.2; 
         
         current.zoom += zoomDiff * t;
         current.x += xDiff * t;
@@ -112,18 +113,25 @@ function App() {
 
     // Handle initial state
     socket.on('initial_state', (grid) => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas
       grid.forEach((row, y) => {
         row.forEach((color, x) => {
-          ctx.fillStyle = color;
-          ctx.fillRect(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE);
+          if (color) {
+            ctx.fillStyle = color;
+            ctx.fillRect(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE);
+          }
         });
       });
     });
 
     // Handle updates
     socket.on('pixel_update', ({ x, y, color }) => {
-      ctx.fillStyle = color;
-      ctx.fillRect(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE);
+      if (color) {
+        ctx.fillStyle = color;
+        ctx.fillRect(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE);
+      } else {
+        ctx.clearRect(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE);
+      }
 
       // Trigger animation
       const id = Date.now() + Math.random();
@@ -159,6 +167,30 @@ function App() {
     
     // If we were dragging (panning), don't paint
     if (isDragging.current) return;
+
+    if (isEyedropperActive) {
+      // Eyedropper logic
+      const canvas = canvasRef.current;
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const x = Math.floor((e.clientX - rect.left) * scaleX / PIXEL_SIZE);
+      const y = Math.floor((e.clientY - rect.top) * scaleY / PIXEL_SIZE);
+
+      // We need to get the color from the canvas context or server state
+      // Since we don't have the full grid state in a variable easily accessible here without prop drilling or context,
+      // we can read from the canvas itself.
+      const ctx = canvas.getContext('2d');
+      const pixelData = ctx.getImageData(x * PIXEL_SIZE, y * PIXEL_SIZE, 1, 1).data;
+      
+      // If transparent (alpha 0), don't pick
+      if (pixelData[3] === 0) return;
+
+      const hex = "#" + ((1 << 24) + (pixelData[0] << 16) + (pixelData[1] << 8) + pixelData[2]).toString(16).slice(1).toUpperCase();
+      setSelectedColor(hex);
+      setIsEyedropperActive(false);
+      return;
+    }
 
     placePixel(e.clientX, e.clientY);
   };
@@ -274,8 +306,10 @@ function App() {
     // Use target values for calculation to ensure consistency
     const currentTarget = targetTransform.current;
     
-    const scaleAmount = -e.deltaY * 0.002;
-    const newZoom = Math.min(Math.max(0.1, currentTarget.zoom + scaleAmount), 10);
+    // Exponential zoom for "swifter" feel when closeup
+    const zoomSpeed = 0.001;
+    const zoomFactor = 1 - e.deltaY * zoomSpeed;
+    const newZoom = Math.min(Math.max(0.1, currentTarget.zoom * zoomFactor), 20);
 
     // Zoom towards cursor
     const newOffsetX = mouseX - (mouseX - currentTarget.x) * (newZoom / currentTarget.zoom);
@@ -354,16 +388,40 @@ function App() {
             transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`
           }}
         >
+          <svg 
+            className="grid-overlay" 
+            width="100%" 
+            height="100%" 
+            xmlns="http://www.w3.org/2000/svg"
+            style={{ opacity: zoom > 1.2 ? 1 : 0, transition: 'opacity 0.2s', position: 'absolute', top: 0, left: 0, zIndex: 3, pointerEvents: 'none' }}
+          >
+            <defs>
+              <pattern 
+                id="grid" 
+                width={PIXEL_SIZE} 
+                height={PIXEL_SIZE} 
+                patternUnits="userSpaceOnUse"
+              >
+                <path 
+                  d={`M ${PIXEL_SIZE} 0 L 0 0 0 ${PIXEL_SIZE}`} 
+                  fill="none" 
+                  stroke="rgba(0,0,0,0.6)" 
+                  strokeWidth={1 / zoom} 
+                />
+              </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#grid)" />
+          </svg>
           <canvas
             ref={canvasRef}
             width={CANVAS_SIZE * PIXEL_SIZE}
             height={CANVAS_SIZE * PIXEL_SIZE}
             onClick={handleCanvasClick}
             className="pixel-canvas"
-          />
-          <div 
-            className="grid-overlay" 
-            style={{ opacity: zoom > 1.5 ? 0.5 : 0 }}
+            style={{ 
+              imageRendering: 'pixelated',
+              cursor: isEyedropperActive ? 'copy' : 'crosshair'
+            }}
           />
           {zoom > 1.5 && animatingPixels.map(p => (
             <div
@@ -395,18 +453,44 @@ function App() {
       <div className="controls-bar">
         <div className="color-presets">
           {palette.map((color, index) => (
-            <button
-              key={index}
-              className={`color-preset ${activePaletteIndex === index ? 'selected' : ''}`}
-              style={{ backgroundColor: color }}
-              onClick={() => {
-                setSelectedColor(color);
-                setActivePaletteIndex(index);
-              }}
-            />
+            <div key={index} className="color-preset-wrapper">
+              <button
+                className={`color-preset ${activePaletteIndex === index ? 'selected' : ''}`}
+                style={{ backgroundColor: color }}
+                onClick={() => {
+                  setSelectedColor(color);
+                  setActivePaletteIndex(index);
+                }}
+              />
+              <button 
+                className="remove-color-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const newPalette = palette.filter((_, i) => i !== index);
+                  setPalette(newPalette);
+                  if (activePaletteIndex === index) {
+                    setActivePaletteIndex(0);
+                    if (newPalette.length > 0) setSelectedColor(newPalette[0]);
+                  } else if (activePaletteIndex > index) {
+                    setActivePaletteIndex(activePaletteIndex - 1);
+                  }
+                }}
+              >
+                ×
+              </button>
+            </div>
           ))}
         </div>
         <div className="color-picker-wrapper">
+          <button 
+            className={`eyedropper-btn ${isEyedropperActive ? 'active' : ''}`}
+            onClick={() => setIsEyedropperActive(!isEyedropperActive)}
+            title="Pick color from canvas"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17.293 3.293a1 1 0 0 1 1.414 0l2 2a1 1 0 0 1 0 1.414L9 18.414 3 21l2.586-6 11.707-11.707z"/>
+            </svg>
+          </button>
           <input 
             type="color" 
             value={selectedColor} 
@@ -418,11 +502,10 @@ function App() {
           <button 
             className="add-color-btn"
             onClick={() => {
-              const newPalette = [...palette];
-              newPalette[activePaletteIndex] = selectedColor;
-              setPalette(newPalette);
+              setPalette([...palette, selectedColor]);
+              setActivePaletteIndex(palette.length);
             }}
-            title="Replace selected color"
+            title="Add selected color"
           >
             +
           </button>

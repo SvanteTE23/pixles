@@ -17,10 +17,8 @@ const io = new Server(server, {
 
 // Canvas configuration
 const CANVAS_SIZE = 1000; // 1000x1000 grid
-// Initialize canvas with white pixels (#FFFFFF)
-// We can use a simple 2D array or a map. A flat array is also fine.
-// Let's use a 2D array of strings (hex codes).
-let canvas = Array(CANVAS_SIZE).fill(null).map(() => Array(CANVAS_SIZE).fill('#FFFFFF'));
+// Initialize canvas with null (transparent/empty)
+let canvas = Array(CANVAS_SIZE).fill(null).map(() => Array(CANVAS_SIZE).fill(null));
 
 io.on('connection', (socket) => {
   console.log('A user connected:', socket.id);

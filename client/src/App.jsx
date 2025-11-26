@@ -401,7 +401,7 @@ function App() {
               cursor: isEyedropperActive ? 'copy' : 'crosshair'
             }}
           />
-          {zoom > 2 && (
+          {zoom > 4 && (
             <div 
               className="grid-overlay"
               style={{
@@ -417,7 +417,7 @@ function App() {
                 backgroundSize: `${PIXEL_SIZE}px ${PIXEL_SIZE}px`,
                 pointerEvents: 'none',
                 zIndex: 3,
-                opacity: Math.min((zoom - 2) / 2, 1),
+                opacity: Math.min((zoom - 4) / 2, 1),
                 transition: 'opacity 0.2s'
               }}
             />

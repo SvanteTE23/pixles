@@ -26,17 +26,57 @@ function App() {
   const [selectedColor, setSelectedColor] = useState(INITIAL_PRESETS[0]);
   const [palette, setPalette] = useState(INITIAL_PRESETS);
   const [activePaletteIndex, setActivePaletteIndex] = useState(0);
+  
+  // Render state
   const [zoom, setZoom] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
+  
+  // Animation refs
+  const targetTransform = useRef({ zoom: 1, x: 0, y: 0 });
+  const currentTransform = useRef({ zoom: 1, x: 0, y: 0 });
+  
   const [hoveredPixel, setHoveredPixel] = useState(null);
   const [animatingPixels, setAnimatingPixels] = useState([]);
 
   const isDragging = useRef(false);
-  const dragStart = useRef({ x: 0, y: 0 });
+  const lastMousePos = useRef({ x: 0, y: 0 });
 
   const canvasRef = useRef(null);
   const socketRef = useRef(null);
   const containerRef = useRef(null);
+
+  // Animation Loop
+  useEffect(() => {
+    let animationFrameId;
+    
+    const animate = () => {
+      const target = targetTransform.current;
+      const current = currentTransform.current;
+      
+      // Smooth Zoom (Lerp)
+      // We only lerp if there's a significant difference
+      const zoomDiff = target.zoom - current.zoom;
+      const xDiff = target.x - current.x;
+      const yDiff = target.y - current.y;
+
+      if (Math.abs(zoomDiff) > 0.0001 || Math.abs(xDiff) > 0.1 || Math.abs(yDiff) > 0.1) {
+        // Lerp factor for zoom - adjust for smoothness
+        const t = 0.1; 
+        
+        current.zoom += zoomDiff * t;
+        current.x += xDiff * t;
+        current.y += yDiff * t;
+
+        setZoom(current.zoom);
+        setOffset({ x: current.x, y: current.y });
+      }
+
+      animationFrameId = requestAnimationFrame(animate);
+    };
+    
+    animate();
+    return () => cancelAnimationFrame(animationFrameId);
+  }, []);
 
   useEffect(() => {
     // Fit to screen on load
@@ -44,12 +84,15 @@ function App() {
       window.innerWidth / (CANVAS_SIZE * PIXEL_SIZE),
       window.innerHeight / (CANVAS_SIZE * PIXEL_SIZE)
     ) * 0.9;
-    setZoom(fitZoom);
     
-    // Center the canvas initially
     const startX = (window.innerWidth - CANVAS_SIZE * PIXEL_SIZE * fitZoom) / 2;
     const startY = (window.innerHeight - CANVAS_SIZE * PIXEL_SIZE * fitZoom) / 2;
+
+    // Initialize both state and refs
+    setZoom(fitZoom);
     setOffset({ x: startX, y: startY });
+    targetTransform.current = { zoom: fitZoom, x: startX, y: startY };
+    currentTransform.current = { zoom: fitZoom, x: startX, y: startY };
 
     // Connect to server
     socketRef.current = io(SERVER_URL);
@@ -87,13 +130,15 @@ function App() {
   }, []);
 
   const handleCanvasClick = (e) => {
-    // Only click if we didn't drag significantly
+    // Only allow left click for painting
+    if (e.button !== 0) return;
+    
+    // If we were dragging (panning), don't paint
     if (isDragging.current) return;
 
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
     
-    // Calculate click position relative to the canvas, accounting for zoom
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
 
@@ -112,36 +157,49 @@ function App() {
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
+    // Use target values for calculation to ensure consistency
+    const currentTarget = targetTransform.current;
+    
     const scaleAmount = -e.deltaY * 0.002;
-    const newZoom = Math.min(Math.max(0.1, zoom + scaleAmount), 10);
+    const newZoom = Math.min(Math.max(0.1, currentTarget.zoom + scaleAmount), 10);
 
-    // Zoom towards cursor:
-    // Calculate new offset so that the point under cursor remains under cursor
-    // newOffset = mousePos - (mousePos - oldOffset) * (newZoom / oldZoom)
-    const newOffsetX = mouseX - (mouseX - offset.x) * (newZoom / zoom);
-    const newOffsetY = mouseY - (mouseY - offset.y) * (newZoom / zoom);
+    // Zoom towards cursor
+    const newOffsetX = mouseX - (mouseX - currentTarget.x) * (newZoom / currentTarget.zoom);
+    const newOffsetY = mouseY - (mouseY - currentTarget.y) * (newZoom / currentTarget.zoom);
 
-    setZoom(newZoom);
-    setOffset({ x: newOffsetX, y: newOffsetY });
+    targetTransform.current = { zoom: newZoom, x: newOffsetX, y: newOffsetY };
   };
 
   const handleMouseDown = (e) => {
+    // Right click for panning
+    if (e.button === 2) {
+      isDragging.current = true;
+      lastMousePos.current = { x: e.clientX, y: e.clientY };
+    }
+  };
+
+  const handleMouseUp = () => {
     isDragging.current = false;
-    dragStart.current = { x: e.clientX - offset.x, y: e.clientY - offset.y };
   };
 
   const handleMouseMove = (e) => {
-    // Panning Logic
-    if (e.buttons === 1) {
-      const newX = e.clientX - dragStart.current.x;
-      const newY = e.clientY - dragStart.current.y;
+    // Panning Logic (Right Mouse Button)
+    if (isDragging.current) {
+      const dx = e.clientX - lastMousePos.current.x;
+      const dy = e.clientY - lastMousePos.current.y;
       
-      // Simple threshold to distinguish click from drag
-      if (Math.abs(newX - offset.x) > 5 || Math.abs(newY - offset.y) > 5) {
-        isDragging.current = true;
-      }
+      // Update targets
+      targetTransform.current.x += dx;
+      targetTransform.current.y += dy;
       
-      setOffset({ x: newX, y: newY });
+      // Instant update for current transform to avoid lag during pan
+      currentTransform.current.x += dx;
+      currentTransform.current.y += dy;
+      
+      // Force state update for responsiveness
+      setOffset({ x: currentTransform.current.x, y: currentTransform.current.y });
+      
+      lastMousePos.current = { x: e.clientX, y: e.clientY };
     }
 
     // Hover Logic
@@ -169,7 +227,9 @@ function App() {
         ref={containerRef}
         onWheel={handleWheel}
         onMouseDown={handleMouseDown}
+        onMouseUp={handleMouseUp}
         onMouseMove={handleMouseMove}
+        onContextMenu={(e) => e.preventDefault()} // Prevent context menu
       >
         <div 
           className="canvas-wrapper"

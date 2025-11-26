@@ -184,8 +184,10 @@ function App() {
       touchState.current.lastTouchPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
       touchState.current.startTouchPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
       touchState.current.hasMoved = false;
+      touchState.current.isPinching = false;
     } else if (e.touches.length === 2) {
       touchState.current.isPinching = true;
+      touchState.current.isDragging = false; // Disable drag when pinching starts
       touchState.current.lastDist = getTouchDistance(e.touches);
       touchState.current.lastCenter = getTouchCenter(e.touches);
     }
@@ -243,7 +245,7 @@ function App() {
   };
 
   const handleTouchEnd = (e) => {
-    if (!touchState.current.hasMoved && !touchState.current.isPinching && e.changedTouches.length === 1 && touchState.current.isDragging) {
+    if (!touchState.current.hasMoved && !touchState.current.isPinching && e.changedTouches.length === 1 && touchState.current.isDragging && e.touches.length === 0) {
       // It's a tap!
       const touch = e.changedTouches[0];
       placePixel(touch.clientX, touch.clientY);
@@ -252,6 +254,13 @@ function App() {
     if (e.touches.length === 0) {
       touchState.current.isDragging = false;
       touchState.current.isPinching = false;
+    } else if (e.touches.length === 1) {
+      // Transition from pinch to drag
+      if (touchState.current.isPinching) {
+        touchState.current.isPinching = false;
+        touchState.current.isDragging = true;
+        touchState.current.lastTouchPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      }
     }
   };
 
@@ -401,6 +410,7 @@ function App() {
           <input 
             type="color" 
             value={selectedColor} 
+            onInput={(e) => setSelectedColor(e.target.value)}
             onChange={(e) => setSelectedColor(e.target.value)} 
             className="color-picker"
             title="Choose custom color"

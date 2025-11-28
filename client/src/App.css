@@ -209,11 +209,7 @@
 .other-cursor {
   position: absolute;
   pointer-events: none;
-  border: 2px solid;
-  background-color: rgba(255, 255, 255, 0.2);
-  box-sizing: border-box;
-  z-index: 4;
-  border-radius: 2px;
+  z-index: 10;
   transition: left 0.1s ease-out, top 0.1s ease-out;
 }
 

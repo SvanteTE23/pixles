@@ -603,14 +603,16 @@ function App() {
               key={id}
               className="other-cursor"
               style={{
-                left: cursor.x * PIXEL_SIZE,
-                top: cursor.y * PIXEL_SIZE,
-                width: PIXEL_SIZE,
-                height: PIXEL_SIZE,
-                borderColor: cursor.color,
-                boxShadow: `0 0 8px ${cursor.color}`
+                left: cursor.x * PIXEL_SIZE + PIXEL_SIZE / 2,
+                top: cursor.y * PIXEL_SIZE + PIXEL_SIZE / 2,
+                '--cursor-color': cursor.color
               }}
-            />
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" style={{ transform: 'translate(-50%, -50%)' }}>
+                <line x1="12" y1="4" x2="12" y2="20" stroke={cursor.color} strokeWidth="2" strokeLinecap="round"/>
+                <line x1="4" y1="12" x2="20" y2="12" stroke={cursor.color} strokeWidth="2" strokeLinecap="round"/>
+              </svg>
+            </div>
           ))}
         </div>
       </div>

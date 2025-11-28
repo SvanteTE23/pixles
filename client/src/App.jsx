@@ -605,12 +605,22 @@ function App() {
               style={{
                 left: cursor.x * PIXEL_SIZE + PIXEL_SIZE / 2,
                 top: cursor.y * PIXEL_SIZE + PIXEL_SIZE / 2,
-                '--cursor-color': cursor.color
               }}
             >
-              <svg width="24" height="24" viewBox="0 0 24 24" style={{ transform: 'translate(-50%, -50%)' }}>
-                <line x1="12" y1="4" x2="12" y2="20" stroke={cursor.color} strokeWidth="2" strokeLinecap="round"/>
-                <line x1="4" y1="12" x2="20" y2="12" stroke={cursor.color} strokeWidth="2" strokeLinecap="round"/>
+              <svg 
+                width={PIXEL_SIZE * 3} 
+                height={PIXEL_SIZE * 3} 
+                viewBox="0 0 3 3" 
+                style={{ 
+                  transform: 'translate(-50%, -50%)',
+                  shapeRendering: 'crispEdges'
+                }}
+              >
+                <rect x="1" y="0" width="1" height="1" fill={cursor.color}/>
+                <rect x="0" y="1" width="1" height="1" fill={cursor.color}/>
+                <rect x="1" y="1" width="1" height="1" fill={cursor.color}/>
+                <rect x="2" y="1" width="1" height="1" fill={cursor.color}/>
+                <rect x="1" y="2" width="1" height="1" fill={cursor.color}/>
               </svg>
             </div>
           ))}

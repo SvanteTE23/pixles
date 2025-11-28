@@ -608,19 +608,19 @@ function App() {
               }}
             >
               <svg 
-                width={PIXEL_SIZE * 3} 
-                height={PIXEL_SIZE * 3} 
-                viewBox="0 0 3 3" 
+                width={PIXEL_SIZE} 
+                height={PIXEL_SIZE} 
+                viewBox="0 0 5 5" 
                 style={{ 
                   transform: 'translate(-50%, -50%)',
                   shapeRendering: 'crispEdges'
                 }}
               >
-                <rect x="1" y="0" width="1" height="1" fill={cursor.color}/>
-                <rect x="0" y="1" width="1" height="1" fill={cursor.color}/>
-                <rect x="1" y="1" width="1" height="1" fill={cursor.color}/>
-                <rect x="2" y="1" width="1" height="1" fill={cursor.color}/>
-                <rect x="1" y="2" width="1" height="1" fill={cursor.color}/>
+                <rect x="2" y="0" width="1" height="2" fill={cursor.color}/>
+                <rect x="0" y="2" width="2" height="1" fill={cursor.color}/>
+                <rect x="2" y="2" width="1" height="1" fill={cursor.color}/>
+                <rect x="3" y="2" width="2" height="1" fill={cursor.color}/>
+                <rect x="2" y="3" width="1" height="2" fill={cursor.color}/>
               </svg>
             </div>
           ))}

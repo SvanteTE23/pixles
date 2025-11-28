@@ -38,6 +38,7 @@ function App() {
   const [hoveredPixel, setHoveredPixel] = useState(null);
   const [animatingPixels, setAnimatingPixels] = useState([]);
   const [isEyedropperActive, setIsEyedropperActive] = useState(false);
+  const [pixelsRemaining, setPixelsRemaining] = useState(10);
 
   const isDragging = useRef(false);
   const lastMousePos = useRef({ x: 0, y: 0 });
@@ -147,6 +148,9 @@ function App() {
   }, []);
 
   const placePixel = (clientX, clientY) => {
+    // Check if user has pixels remaining
+    if (pixelsRemaining <= 0) return;
+    
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
     
@@ -158,6 +162,7 @@ function App() {
 
     if (x >= 0 && x < CANVAS_SIZE && y >= 0 && y < CANVAS_SIZE) {
       socketRef.current.emit('place_pixel', { x, y, color: selectedColor });
+      setPixelsRemaining(prev => prev - 1);
     }
   };
 
@@ -370,6 +375,15 @@ function App() {
 
   return (
     <div className="app-container">
+      <div className="pixels-counter">
+        <div className="pixels-counter-inner">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <rect x="4" y="4" width="16" height="16" rx="2"/>
+          </svg>
+          <span>{pixelsRemaining}</span>
+        </div>
+        {pixelsRemaining === 0 && <div className="pixels-depleted">No pixels left!</div>}
+      </div>
       <div 
         className="viewport"
         ref={containerRef}

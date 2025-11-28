@@ -385,40 +385,11 @@ function App() {
         <div 
           className="canvas-wrapper"
           style={{ 
-            transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`
+            transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
+            width: CANVAS_SIZE * PIXEL_SIZE,
+            height: CANVAS_SIZE * PIXEL_SIZE
           }}
         >
-          <svg 
-            width={CANVAS_SIZE * PIXEL_SIZE} 
-            height={CANVAS_SIZE * PIXEL_SIZE} 
-            xmlns="http://www.w3.org/2000/svg"
-            style={{ 
-              opacity: zoom > 0.8 ? Math.min((zoom - 0.8) * 2.5, 1) : 0, 
-              transition: 'opacity 0.2s', 
-              position: 'absolute', 
-              top: 0, 
-              left: 0, 
-              zIndex: 3, 
-              pointerEvents: 'none' 
-            }}
-          >
-            <defs>
-              <pattern 
-                id="grid" 
-                width={PIXEL_SIZE} 
-                height={PIXEL_SIZE} 
-                patternUnits="userSpaceOnUse"
-              >
-                <path 
-                  d={`M ${PIXEL_SIZE} 0 L 0 0 0 ${PIXEL_SIZE}`} 
-                  fill="none" 
-                  stroke="rgba(0,0,0,0.4)" 
-                  strokeWidth="0.5"
-                />
-              </pattern>
-            </defs>
-            <rect width="100%" height="100%" fill="url(#grid)" />
-          </svg>
           <canvas
             ref={canvasRef}
             width={CANVAS_SIZE * PIXEL_SIZE}
@@ -430,6 +401,27 @@ function App() {
               cursor: isEyedropperActive ? 'copy' : 'crosshair'
             }}
           />
+          {zoom > 4 && (
+            <div 
+              className="grid-overlay"
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: CANVAS_SIZE * PIXEL_SIZE,
+                height: CANVAS_SIZE * PIXEL_SIZE,
+                backgroundImage: `
+                  linear-gradient(to right, rgba(0,0,0,0.12) ${1/zoom}px, transparent ${1/zoom}px),
+                  linear-gradient(to bottom, rgba(0,0,0,0.12) ${1/zoom}px, transparent ${1/zoom}px)
+                `,
+                backgroundSize: `${PIXEL_SIZE}px ${PIXEL_SIZE}px`,
+                pointerEvents: 'none',
+                zIndex: 3,
+                opacity: Math.min((zoom - 4) / 2, 1),
+                transition: 'opacity 0.2s'
+              }}
+            />
+          )}
           {zoom > 1.5 && animatingPixels.map(p => (
             <div
               key={p.id}

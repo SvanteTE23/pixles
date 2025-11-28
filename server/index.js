@@ -46,11 +46,13 @@ io.on('connection', (socket) => {
   socket.broadcast.emit('user_joined', { id: socket.id, color: userColor });
 
   // Handle cursor movement
-  socket.on('cursor_move', ({ x, y }) => {
+  socket.on('cursor_move', ({ x, y, name }) => {
     if (users.has(socket.id)) {
-      users.get(socket.id).x = x;
-      users.get(socket.id).y = y;
-      socket.broadcast.emit('cursor_update', { id: socket.id, x, y, color: users.get(socket.id).color });
+      const user = users.get(socket.id);
+      user.x = x;
+      user.y = y;
+      if (name !== undefined) user.name = name;
+      socket.broadcast.emit('cursor_update', { id: socket.id, x, y, color: user.color, name: user.name });
     }
   });
 

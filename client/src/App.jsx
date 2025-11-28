@@ -50,6 +50,12 @@ function App() {
     const saved = localStorage.getItem('darkMode');
     return saved === 'true';
   });
+  const [displayName, setDisplayName] = useState(() => {
+    return localStorage.getItem('displayName') || '';
+  });
+  const [displayNameInput, setDisplayNameInput] = useState(() => {
+    return localStorage.getItem('displayName') || '';
+  });
   const [pixelsRemaining, setPixelsRemaining] = useState(() => {
     const saved = localStorage.getItem('pixelsRemaining');
     const refillTime = localStorage.getItem('refillTime');
@@ -223,12 +229,12 @@ function App() {
       setOtherCursors(others);
     });
 
-    socket.on('user_joined', ({ id, color }) => {
-      setOtherCursors(prev => ({ ...prev, [id]: { x: 0, y: 0, color } }));
+    socket.on('user_joined', ({ id, color, name }) => {
+      setOtherCursors(prev => ({ ...prev, [id]: { x: 0, y: 0, color, name } }));
     });
 
-    socket.on('cursor_update', ({ id, x, y, color }) => {
-      setOtherCursors(prev => ({ ...prev, [id]: { x, y, color } }));
+    socket.on('cursor_update', ({ id, x, y, color, name }) => {
+      setOtherCursors(prev => ({ ...prev, [id]: { x, y, color, name } }));
     });
 
     socket.on('user_left', (id) => {
@@ -466,7 +472,7 @@ function App() {
         setHoveredPixel({ x, y });
         // Emit cursor position to server
         if (socketRef.current) {
-          socketRef.current.emit('cursor_move', { x, y });
+          socketRef.current.emit('cursor_move', { x, y, name: displayName });
         }
       } else {
         setHoveredPixel(null);
@@ -622,6 +628,17 @@ function App() {
                 <rect x="3" y="2" width="2" height="1" fill={cursor.color}/>
                 <rect x="2" y="3" width="1" height="2" fill={cursor.color}/>
               </svg>
+              {cursor.name && (
+                <div 
+                  className="cursor-name"
+                  style={{ 
+                    color: cursor.color,
+                    transform: `translate(-50%, ${PIXEL_SIZE / 2 + 2}px) scale(${1/zoom})`
+                  }}
+                >
+                  {cursor.name}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -707,6 +724,35 @@ function App() {
           
           {/* General Settings */}
           <div className="settings-section">
+            <div className="settings-row">
+              <span>Display Name</span>
+              <div className="display-name-wrapper">
+                <input
+                  type="text"
+                  className="display-name-input"
+                  placeholder="Enter name..."
+                  value={displayNameInput}
+                  onChange={(e) => setDisplayNameInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      setDisplayName(displayNameInput);
+                      localStorage.setItem('displayName', displayNameInput);
+                    }
+                  }}
+                  maxLength={20}
+                />
+                <button
+                  className="display-name-btn"
+                  onClick={() => {
+                    setDisplayName(displayNameInput);
+                    localStorage.setItem('displayName', displayNameInput);
+                  }}
+                  title="Set name"
+                >
+                  ✓
+                </button>
+              </div>
+            </div>
             <div className="settings-row">
               <span>Dark Mode</span>
               <label className="toggle-switch">

@@ -213,6 +213,21 @@
   transition: left 0.1s ease-out, top 0.1s ease-out;
 }
 
+.cursor-name {
+  position: absolute;
+  left: 50%;
+  white-space: nowrap;
+  font-size: 10px;
+  font-weight: 600;
+  text-shadow: 
+    -1px -1px 0 rgba(255,255,255,0.8),
+    1px -1px 0 rgba(255,255,255,0.8),
+    -1px 1px 0 rgba(255,255,255,0.8),
+    1px 1px 0 rgba(255,255,255,0.8);
+  transform-origin: top center;
+  pointer-events: none;
+}
+
 .controls-bar {
   position: absolute;
   bottom: 30px;
@@ -546,6 +561,56 @@
   color: #333;
 }
 
+.display-name-wrapper {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.display-name-input {
+  width: 100px;
+  padding: 6px 10px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 8px;
+  font-size: 13px;
+  background: rgba(255, 255, 255, 0.6);
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.display-name-input:focus {
+  border-color: rgba(69, 183, 209, 0.5);
+  box-shadow: 0 0 0 3px rgba(69, 183, 209, 0.15);
+}
+
+.display-name-input::placeholder {
+  color: #999;
+}
+
+.display-name-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 8px;
+  background: rgba(46, 204, 113, 0.2);
+  color: #27ae60;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, transform 0.1s;
+}
+
+.display-name-btn:hover {
+  background: rgba(46, 204, 113, 0.4);
+}
+
+.display-name-btn:active {
+  transform: scale(0.95);
+}
+
 .section-title {
   font-size: 12px;
   font-weight: 600;
@@ -663,6 +728,26 @@ body.dark-mode .admin-header button {
 
 body.dark-mode .settings-row {
   color: #eee;
+}
+
+body.dark-mode .display-name-input {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #eee;
+}
+
+body.dark-mode .display-name-input::placeholder {
+  color: #888;
+}
+
+body.dark-mode .display-name-btn {
+  background: rgba(46, 204, 113, 0.3);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #2ecc71;
+}
+
+body.dark-mode .display-name-btn:hover {
+  background: rgba(46, 204, 113, 0.5);
 }
 
 body.dark-mode .section-title {

@@ -20,11 +20,39 @@ const CANVAS_SIZE = 1000; // 1000x1000 grid
 // Initialize canvas with null (transparent/empty)
 let canvas = Array(CANVAS_SIZE).fill(null).map(() => Array(CANVAS_SIZE).fill(null));
 
+// Store connected users and their cursors
+const users = new Map();
+
+// Generate a random color for each user
+const getRandomColor = () => {
+  const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFE66D', '#FF9F43', '#9B59B6', '#FF9FF3', '#2ECC71', '#3498DB', '#E74C3C'];
+  return colors[Math.floor(Math.random() * colors.length)];
+};
+
 io.on('connection', (socket) => {
   console.log('A user connected:', socket.id);
+  
+  // Create user with random color
+  const userColor = getRandomColor();
+  users.set(socket.id, { x: 0, y: 0, color: userColor });
 
   // Send the current canvas state to the new user
   socket.emit('initial_state', canvas);
+  
+  // Send current users to the new user
+  socket.emit('users_update', Object.fromEntries(users));
+  
+  // Notify others about new user
+  socket.broadcast.emit('user_joined', { id: socket.id, color: userColor });
+
+  // Handle cursor movement
+  socket.on('cursor_move', ({ x, y }) => {
+    if (users.has(socket.id)) {
+      users.get(socket.id).x = x;
+      users.get(socket.id).y = y;
+      socket.broadcast.emit('cursor_update', { id: socket.id, x, y, color: users.get(socket.id).color });
+    }
+  });
 
   // Handle pixel updates
   socket.on('place_pixel', ({ x, y, color }) => {
@@ -40,6 +68,8 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     console.log('User disconnected:', socket.id);
+    users.delete(socket.id);
+    io.emit('user_left', socket.id);
   });
 });
 

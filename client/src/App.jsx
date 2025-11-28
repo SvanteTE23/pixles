@@ -5,6 +5,8 @@ import './App.css';
 const CANVAS_SIZE = 1000; // Must match server
 const PIXEL_SIZE = 4; // Size of each pixel in visual px
 const SERVER_URL = `http://${window.location.hostname}:3001`;
+const MAX_PIXELS = 10;
+const REFILL_TIME = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 
 const INITIAL_PRESETS = [
   '#2D2D2D', // Charcoal
@@ -37,8 +39,37 @@ function App() {
   
   const [hoveredPixel, setHoveredPixel] = useState(null);
   const [animatingPixels, setAnimatingPixels] = useState([]);
+  const [otherCursors, setOtherCursors] = useState({});
   const [isEyedropperActive, setIsEyedropperActive] = useState(false);
-  const [pixelsRemaining, setPixelsRemaining] = useState(10);
+  const [isAdminOpen, setIsAdminOpen] = useState(false);
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
+  const [adminPassword, setAdminPassword] = useState('');
+  const [adminPasswordError, setAdminPasswordError] = useState(false);
+  const [adminPixelInput, setAdminPixelInput] = useState('');
+  const [darkMode, setDarkMode] = useState(() => {
+    const saved = localStorage.getItem('darkMode');
+    return saved === 'true';
+  });
+  const [pixelsRemaining, setPixelsRemaining] = useState(() => {
+    const saved = localStorage.getItem('pixelsRemaining');
+    const refillTime = localStorage.getItem('refillTime');
+    if (saved !== null && refillTime) {
+      const timeLeft = parseInt(refillTime) - Date.now();
+      if (timeLeft <= 0) {
+        return MAX_PIXELS;
+      }
+      return parseInt(saved);
+    }
+    return MAX_PIXELS;
+  });
+  const [timeUntilRefill, setTimeUntilRefill] = useState(() => {
+    const refillTime = localStorage.getItem('refillTime');
+    if (refillTime) {
+      const timeLeft = parseInt(refillTime) - Date.now();
+      return timeLeft > 0 ? timeLeft : 0;
+    }
+    return 0;
+  });
 
   const isDragging = useRef(false);
   const lastMousePos = useRef({ x: 0, y: 0 });
@@ -55,6 +86,49 @@ function App() {
   const canvasRef = useRef(null);
   const socketRef = useRef(null);
   const containerRef = useRef(null);
+
+  // Timer for pixel refill
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const refillTime = localStorage.getItem('refillTime');
+      if (refillTime) {
+        const timeLeft = parseInt(refillTime) - Date.now();
+        if (timeLeft <= 0) {
+          // Refill pixels
+          setPixelsRemaining(MAX_PIXELS);
+          setTimeUntilRefill(0);
+          localStorage.removeItem('refillTime');
+          localStorage.setItem('pixelsRemaining', MAX_PIXELS.toString());
+        } else {
+          setTimeUntilRefill(timeLeft);
+        }
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Save pixels to localStorage when changed
+  useEffect(() => {
+    localStorage.setItem('pixelsRemaining', pixelsRemaining.toString());
+    
+    // Start timer only when all pixels are used
+    if (pixelsRemaining === 0 && !localStorage.getItem('refillTime')) {
+      const refillTime = Date.now() + REFILL_TIME;
+      localStorage.setItem('refillTime', refillTime.toString());
+      setTimeUntilRefill(REFILL_TIME);
+    }
+  }, [pixelsRemaining]);
+
+  // Dark mode effect
+  useEffect(() => {
+    localStorage.setItem('darkMode', darkMode.toString());
+    if (darkMode) {
+      document.body.classList.add('dark-mode');
+    } else {
+      document.body.classList.remove('dark-mode');
+    }
+  }, [darkMode]);
 
   // Animation Loop
   useEffect(() => {
@@ -140,6 +214,29 @@ function App() {
       setTimeout(() => {
         setAnimatingPixels(prev => prev.filter(p => p.id !== id));
       }, 400);
+    });
+
+    // Handle other users' cursors
+    socket.on('users_update', (users) => {
+      const others = { ...users };
+      delete others[socket.id];
+      setOtherCursors(others);
+    });
+
+    socket.on('user_joined', ({ id, color }) => {
+      setOtherCursors(prev => ({ ...prev, [id]: { x: 0, y: 0, color } }));
+    });
+
+    socket.on('cursor_update', ({ id, x, y, color }) => {
+      setOtherCursors(prev => ({ ...prev, [id]: { x, y, color } }));
+    });
+
+    socket.on('user_left', (id) => {
+      setOtherCursors(prev => {
+        const updated = { ...prev };
+        delete updated[id];
+        return updated;
+      });
     });
 
     return () => {
@@ -367,8 +464,41 @@ function App() {
 
       if (x >= 0 && x < CANVAS_SIZE && y >= 0 && y < CANVAS_SIZE) {
         setHoveredPixel({ x, y });
+        // Emit cursor position to server
+        if (socketRef.current) {
+          socketRef.current.emit('cursor_move', { x, y });
+        }
       } else {
         setHoveredPixel(null);
+      }
+    }
+  };
+
+  // Format time for display
+  const formatTime = (ms) => {
+    const totalSeconds = Math.floor(ms / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  // Admin functions
+  const resetTimer = () => {
+    localStorage.removeItem('refillTime');
+    setTimeUntilRefill(0);
+    setPixelsRemaining(MAX_PIXELS);
+  };
+
+  const addPixels = () => {
+    const amount = parseInt(adminPixelInput);
+    if (!isNaN(amount) && amount > 0) {
+      setPixelsRemaining(prev => prev + amount);
+      setAdminPixelInput('');
+      // Clear timer if we have pixels now
+      if (pixelsRemaining === 0) {
+        localStorage.removeItem('refillTime');
+        setTimeUntilRefill(0);
       }
     }
   };
@@ -380,9 +510,16 @@ function App() {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
             <rect x="4" y="4" width="16" height="16" rx="2"/>
           </svg>
-          <span>{pixelsRemaining}</span>
+          <span className={pixelsRemaining === 0 ? 'zero' : ''}>{pixelsRemaining}</span>
         </div>
-        {pixelsRemaining === 0 && <div className="pixels-depleted">No pixels left!</div>}
+        {pixelsRemaining === 0 && (
+          <div className="pixels-depleted">
+            <span>No pixels left!</span>
+            {timeUntilRefill > 0 && (
+              <span className="refill-timer-inline">{formatTime(timeUntilRefill)} until refill</span>
+            )}
+          </div>
+        )}
       </div>
       <div 
         className="viewport"
@@ -460,6 +597,21 @@ function App() {
               }}
             />
           )}
+          {/* Other users' cursors */}
+          {Object.entries(otherCursors).map(([id, cursor]) => (
+            <div
+              key={id}
+              className="other-cursor"
+              style={{
+                left: cursor.x * PIXEL_SIZE,
+                top: cursor.y * PIXEL_SIZE,
+                width: PIXEL_SIZE,
+                height: PIXEL_SIZE,
+                borderColor: cursor.color,
+                boxShadow: `0 0 8px ${cursor.color}`
+              }}
+            />
+          ))}
         </div>
       </div>
 
@@ -524,6 +676,103 @@ function App() {
           </button>
         </div>
       </div>
+
+      {/* Settings Panel */}
+      <button 
+        className="admin-toggle"
+        onClick={() => setIsAdminOpen(!isAdminOpen)}
+        title="Settings"
+      >
+        ⚙️
+      </button>
+
+      {isAdminOpen && (
+        <div className="admin-panel settings-panel">
+          <div className="admin-header">
+            <span>Settings</span>
+            <button onClick={() => { setIsAdminOpen(false); setIsAdminAuthenticated(false); setAdminPassword(''); setAdminPasswordError(false); }}>×</button>
+          </div>
+          
+          {/* General Settings */}
+          <div className="settings-section">
+            <div className="settings-row">
+              <span>Dark Mode</span>
+              <label className="toggle-switch">
+                <input 
+                  type="checkbox" 
+                  checked={darkMode} 
+                  onChange={(e) => setDarkMode(e.target.checked)}
+                />
+                <span className="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+
+          {/* Admin Section */}
+          <div className="settings-section admin-section">
+            <div className="section-title">Admin Controls</div>
+            
+            {!isAdminAuthenticated ? (
+              <div className="admin-content">
+                <input
+                  type="password"
+                  placeholder="Password"
+                  value={adminPassword}
+                  onChange={(e) => { setAdminPassword(e.target.value); setAdminPasswordError(false); }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      if (adminPassword === 'cb!!!!(/&)/(hflöq0=uw3HkjhSJKD') {
+                        setIsAdminAuthenticated(true);
+                        setAdminPassword('');
+                        setAdminPasswordError(false);
+                      } else {
+                        setAdminPasswordError(true);
+                      }
+                    }
+                  }}
+                  className={adminPasswordError ? 'error' : ''}
+                />
+                <button 
+                  className="admin-btn" 
+                  onClick={() => {
+                    if (adminPassword === 'cb!!!!(/&)/(hflöq0=uw3HkjhSJKD') {
+                      setIsAdminAuthenticated(true);
+                      setAdminPassword('');
+                      setAdminPasswordError(false);
+                    } else {
+                      setAdminPasswordError(true);
+                    }
+                  }}
+                >
+                  Login
+                </button>
+                {adminPasswordError && <div className="admin-error">Wrong password</div>}
+              </div>
+            ) : (
+              <div className="admin-content">
+                <button className="admin-btn" onClick={resetTimer}>
+                  Reset Timer & Refill Pixels
+                </button>
+                <div className="admin-input-group">
+                  <input
+                    type="number"
+                    placeholder="Pixels"
+                    value={adminPixelInput}
+                    onChange={(e) => setAdminPixelInput(e.target.value)}
+                    min="1"
+                  />
+                  <button className="admin-btn add-pixels-btn" onClick={addPixels} title="Add Pixels">
+                    +
+                  </button>
+                </div>
+                <div className="admin-info">
+                  Current: {pixelsRemaining} pixels
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

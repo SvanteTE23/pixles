@@ -4,6 +4,11 @@
   overflow: hidden;
   position: relative;
   background-color: #e5e5e5;
+  --icon-color: #333333;
+}
+
+body.dark-mode .app-container {
+  --icon-color: #eeeeee;
 }
 
 .pixels-counter {
@@ -16,6 +21,56 @@
   flex-direction: column;
   align-items: center;
   gap: 8px;
+}
+
+/* Payment Success Message */
+.payment-success-message {
+  position: absolute;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  background: rgba(46, 204, 113, 0.9);
+  backdrop-filter: blur(10px);
+  color: white;
+  padding: 12px 20px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 500;
+  box-shadow: 0 4px 20px rgba(46, 204, 113, 0.4);
+  animation: slideDown 0.3s ease-out;
+}
+
+.payment-success-message button {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.payment-success-message button:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
 }
 
 .pixels-counter-inner {
@@ -406,6 +461,14 @@
   color: #333;
   z-index: 100;
   transition: all 0.2s;
+  font-size: 20px;
+  line-height: 1;
+  padding: 0;
+  padding-bottom: 2px;
+}
+
+.admin-toggle svg {
+  display: block;
 }
 
 .admin-toggle:hover {
@@ -795,4 +858,1121 @@ body.dark-mode .add-color-btn:hover {
   border-color: #fff;
 }
 
+/* Shop Button in Counter */
+.buy-pixels-btn {
+  background: rgba(255, 200, 50, 0.3);
+  border: none;
+  border-radius: 8px;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 14px;
+  margin-left: 8px;
+  transition: background 0.2s, transform 0.1s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 
+.buy-pixels-btn svg {
+  display: block;
+}
+
+.buy-pixels-btn:hover {
+  background: rgba(255, 200, 50, 0.5);
+  transform: scale(1.05);
+}
+
+.purchased-indicator {
+  font-size: 12px;
+  color: #27ae60;
+  font-weight: 500;
+}
+
+.buy-now-btn {
+  background: linear-gradient(135deg, #27ae60, #2ecc71);
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-left: 8px;
+  transition: transform 0.1s, box-shadow 0.2s;
+}
+
+.buy-now-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(46, 204, 113, 0.4);
+}
+
+/* Shop Modal */
+.shop-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(5px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.shop-modal {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  max-width: 420px;
+  max-height: 90vh;
+  width: 95%;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.shop-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: white;
+  font-weight: 600;
+  font-size: 18px;
+}
+
+.shop-header span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.shop-header span svg {
+  display: block;
+}
+
+.shop-header button {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  border-radius: 50%;
+  font-size: 18px;
+  cursor: pointer;
+  transition: background 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 1;
+}
+
+.shop-header button:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.shop-content {
+  padding: 16px;
+  overflow-x: hidden;
+}
+
+.shop-description {
+  text-align: center;
+  color: #666;
+  margin-bottom: 20px;
+  font-size: 14px;
+}
+
+.shop-packages {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.package-btn {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 8px;
+  border: 2px solid #e0e0e0;
+  border-radius: 12px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.package-btn:last-child:nth-child(odd) {
+  grid-column: span 2;
+}
+
+.package-btn:hover {
+  border-color: #667eea;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.2);
+}
+
+.package-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.package-btn.popular {
+  border-color: #27ae60;
+  background: linear-gradient(135deg, rgba(46, 204, 113, 0.1), rgba(39, 174, 96, 0.05));
+}
+
+.package-btn.best-value {
+  border-color: #f39c12;
+  background: linear-gradient(135deg, rgba(243, 156, 18, 0.1), rgba(241, 196, 15, 0.05));
+}
+
+.package-btn.mega {
+  border-color: #e74c3c;
+  background: linear-gradient(135deg, rgba(231, 76, 60, 0.15), rgba(192, 57, 43, 0.05));
+  box-shadow: 0 0 20px rgba(231, 76, 60, 0.2);
+}
+
+.package-btn.mega:hover {
+  box-shadow: 0 8px 30px rgba(231, 76, 60, 0.3);
+}
+
+.package-btn.mega .package-badge {
+  background: linear-gradient(135deg, #e74c3c, #c0392b);
+}
+
+.package-badge {
+  position: absolute;
+  top: -10px;
+  right: 10px;
+  background: linear-gradient(135deg, #27ae60, #2ecc71);
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 10px;
+}
+
+.package-btn.best-value .package-badge {
+  background: linear-gradient(135deg, #f39c12, #f1c40f);
+}
+
+.package-pixels {
+  font-size: 16px;
+  font-weight: 700;
+  color: #333;
+  margin-bottom: 2px;
+}
+
+.package-price {
+  font-size: 14px;
+  color: #667eea;
+  font-weight: 600;
+}
+
+.package-savings {
+  font-size: 10px;
+  color: #27ae60;
+  margin-top: 2px;
+}
+
+.shop-loading {
+  text-align: center;
+  padding: 16px;
+  color: #667eea;
+  font-weight: 500;
+}
+
+.shop-note {
+  text-align: center;
+  color: #888;
+  font-size: 12px;
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.shop-note svg {
+  display: block;
+}
+
+/* Dark mode shop */
+body.dark-mode .shop-modal {
+  background: rgba(30, 30, 40, 0.95);
+}
+
+body.dark-mode .shop-description {
+  color: #aaa;
+}
+
+body.dark-mode .package-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+body.dark-mode .package-btn:hover {
+  border-color: #667eea;
+}
+
+body.dark-mode .package-pixels {
+  color: #eee;
+}
+
+body.dark-mode .shop-note {
+  color: #888;
+}
+
+body.dark-mode .purchased-indicator {
+  color: #2ecc71;
+}
+
+/* ============ POWER-UPS INDICATOR ============ */
+.powerups-indicator {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.powerup-badge {
+  background: rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(10px);
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.powerup-badge svg {
+  display: block;
+}
+
+.powerup-badge:hover {
+  transform: scale(1.05);
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.powerup-badge.active {
+  background: rgba(46, 204, 113, 0.4);
+  border-color: #27ae60;
+}
+
+.powerup-badge.wipe {
+  background: rgba(231, 76, 60, 0.3);
+  border-color: rgba(231, 76, 60, 0.5);
+}
+
+/* ============ TOOLS SIDEBAR ============ */
+.tools-sidebar {
+  position: absolute;
+  left: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+}
+
+.tools-toggle {
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  max-width: 40px;
+  max-height: 40px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(15px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  padding: 0;
+  aspect-ratio: 1;
+}
+
+.tools-toggle:hover {
+  transform: scale(1.1);
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.tools-content {
+  background: rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(15px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 16px;
+  margin-left: 10px;
+  padding: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  display: none;
+}
+
+.tools-sidebar.open .tools-content {
+  display: block;
+}
+
+.tool-section {
+  margin-bottom: 12px;
+}
+
+.tool-section:last-child {
+  margin-bottom: 0;
+}
+
+.tool-section .section-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #666;
+  margin-bottom: 8px;
+  letter-spacing: 0.5px;
+}
+
+.tool-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 60px;
+  padding: 8px 4px;
+  margin-bottom: 6px;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 10px;
+  color: #333;
+}
+
+.tool-btn span:first-child {
+  font-size: 18px;
+  margin-bottom: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tool-btn span:first-child svg {
+  display: block;
+}
+
+.tool-btn:hover {
+  background: rgba(255, 255, 255, 0.5);
+  transform: scale(1.05);
+}
+
+.tool-btn.active {
+  border-color: #667eea;
+  background: rgba(102, 126, 234, 0.2);
+}
+
+.tool-btn.locked {
+  opacity: 0.5;
+  cursor: not-allowed;
+  position: relative;
+}
+
+.tool-btn .lock-icon {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  font-size: 10px;
+}
+
+.tool-btn.powerup {
+  background: rgba(231, 76, 60, 0.2);
+  border-color: rgba(231, 76, 60, 0.3);
+}
+
+.tool-btn.powerup.active {
+  border-color: #e74c3c;
+  background: rgba(231, 76, 60, 0.4);
+}
+
+.tool-btn.effect {
+  background: rgba(155, 89, 182, 0.2);
+  border-color: rgba(155, 89, 182, 0.3);
+}
+
+.tool-btn.effect.active {
+  border-color: #9b59b6;
+  background: rgba(155, 89, 182, 0.4);
+  box-shadow: 0 0 8px rgba(155, 89, 182, 0.5);
+}
+
+/* ============ PIXEL PREVIEW ============ */
+.pixel-preview {
+  position: absolute;
+  pointer-events: none;
+  box-sizing: border-box;
+  z-index: 4;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+}
+
+.protected-pixel-indicator {
+  position: absolute;
+  pointer-events: none;
+  box-sizing: border-box;
+  z-index: 3;
+  border: 2px solid rgba(255, 215, 0, 0.6);
+  background: rgba(255, 215, 0, 0.1);
+}
+
+/* ============ SHOP TABS ============ */
+.shop-tabs {
+  display: flex;
+  border-bottom: 1px solid #eee;
+  background: rgba(0, 0, 0, 0.03);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.shop-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.shop-tabs button {
+  flex: 1;
+  min-width: 70px;
+  padding: 12px 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  color: #666;
+  transition: all 0.2s;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+}
+
+.shop-tabs button:hover {
+  color: #333;
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.shop-tabs button.active {
+  color: #667eea;
+  border-bottom-color: #667eea;
+}
+
+/* ============ SHOP POWER-UPS & TOOLS ============ */
+.shop-packages.powerups,
+.shop-packages.tools,
+.shop-packages.cosmetics {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.shop-packages.powerups .package-btn,
+.shop-packages.tools .package-btn,
+.shop-packages.cosmetics .package-btn {
+  display: grid;
+  grid-template-columns: 40px 1fr auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  text-align: left;
+  padding: 12px 14px;
+  gap: 4px 10px;
+}
+
+.shop-packages.powerups .package-btn:last-child,
+.shop-packages.tools .package-btn:last-child,
+.shop-packages.cosmetics .package-btn:last-child {
+  grid-column: 1;
+}
+
+.shop-packages .package-emoji {
+  font-size: 24px;
+  grid-row: span 2;
+  justify-self: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.shop-packages .package-emoji svg {
+  display: block;
+}
+
+.shop-packages.powerups .package-btn .package-pixels,
+.shop-packages.tools .package-btn .package-pixels,
+.shop-packages.cosmetics .package-btn .package-pixels {
+  font-size: 14px;
+  margin: 0;
+}
+
+.shop-packages .package-desc {
+  font-size: 11px;
+  color: #888;
+  grid-column: 2;
+}
+
+.shop-packages.powerups .package-btn .package-price,
+.shop-packages.tools .package-btn .package-price,
+.shop-packages.cosmetics .package-btn .package-price {
+  grid-row: span 2;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.package-btn.bomb {
+  border-color: rgba(231, 76, 60, 0.3);
+  background: linear-gradient(135deg, rgba(231, 76, 60, 0.1), transparent);
+}
+
+.package-btn.protected {
+  border-color: rgba(241, 196, 15, 0.4);
+  background: linear-gradient(135deg, rgba(241, 196, 15, 0.1), transparent);
+}
+
+.package-btn.wipe {
+  border-color: rgba(155, 89, 182, 0.4);
+  background: linear-gradient(135deg, rgba(155, 89, 182, 0.15), transparent);
+}
+
+.package-btn.tool {
+  border-color: rgba(52, 152, 219, 0.4);
+  background: linear-gradient(135deg, rgba(52, 152, 219, 0.1), transparent);
+}
+
+.package-btn.cosmetic {
+  border-color: rgba(155, 89, 182, 0.4);
+  background: linear-gradient(135deg, rgba(155, 89, 182, 0.1), transparent);
+}
+
+.package-btn.owned {
+  opacity: 0.6;
+  border-color: rgba(46, 204, 113, 0.5);
+  background: linear-gradient(135deg, rgba(46, 204, 113, 0.1), transparent);
+}
+
+.package-btn.owned .package-price {
+  color: #27ae60;
+}
+
+/* Custom cursor color picker */
+.cursor-color-picker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 10px;
+  margin-top: 10px;
+}
+
+.cursor-color-picker span {
+  font-size: 12px;
+  color: #666;
+}
+
+.cursor-color-picker input[type="color"] {
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.cursor-color-picker button {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+
+.cursor-color-picker button:hover {
+  transform: scale(1.05);
+}
+
+/* ============ CONFIRM MODAL ============ */
+.confirm-modal {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  max-width: 350px;
+  width: 90%;
+  overflow: hidden;
+}
+
+.confirm-header {
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #e74c3c, #c0392b);
+  color: white;
+  font-weight: 600;
+  font-size: 18px;
+  text-align: center;
+}
+
+.confirm-header span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.confirm-content {
+  padding: 20px;
+  text-align: center;
+}
+
+.confirm-content p {
+  margin: 10px 0;
+  color: #333;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.confirm-content p svg {
+  display: block;
+}
+
+.confirm-buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.cancel-btn {
+  flex: 1;
+  padding: 12px;
+  border: 2px solid #ddd;
+  border-radius: 10px;
+  background: white;
+  color: #666;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.cancel-btn:hover {
+  border-color: #999;
+  color: #333;
+}
+
+.confirm-btn {
+  flex: 1;
+  padding: 12px;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #e74c3c, #c0392b);
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.confirm-btn svg {
+  display: block;
+}
+
+.confirm-btn:hover {
+  transform: scale(1.02);
+  box-shadow: 0 4px 15px rgba(231, 76, 60, 0.4);
+}
+
+/* ============ ANIMATED NAME ============ */
+.cursor-name.animated-name {
+  animation: rainbowText 2s linear infinite;
+}
+
+@keyframes rainbowText {
+  0% { filter: hue-rotate(0deg); }
+  100% { filter: hue-rotate(360deg); }
+}
+
+.vip-badge {
+  margin-right: 3px;
+}
+
+/* ============ DARK MODE ADDITIONS ============ */
+body.dark-mode .tools-toggle {
+  background: rgba(40, 40, 40, 0.5);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+body.dark-mode .tools-content {
+  background: rgba(40, 40, 40, 0.6);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+body.dark-mode .tool-section .section-label {
+  color: #aaa;
+}
+
+body.dark-mode .tool-btn {
+  background: rgba(255, 255, 255, 0.1);
+  color: #eee;
+}
+
+body.dark-mode .tool-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+body.dark-mode .powerup-badge {
+  background: rgba(40, 40, 40, 0.5);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #eee;
+}
+
+body.dark-mode .shop-tabs {
+  background: rgba(0, 0, 0, 0.2);
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+body.dark-mode .shop-tabs button {
+  color: #aaa;
+}
+
+body.dark-mode .shop-tabs button:hover {
+  color: #eee;
+}
+
+body.dark-mode .shop-tabs button.active {
+  color: #667eea;
+}
+
+body.dark-mode .confirm-modal {
+  background: rgba(30, 30, 40, 0.95);
+}
+
+body.dark-mode .confirm-content p {
+  color: #eee;
+}
+
+body.dark-mode .cancel-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #aaa;
+}
+
+body.dark-mode .cursor-color-picker {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+/* ============ ACCOUNT SECTION ============ */
+.account-section {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  padding-bottom: 16px;
+  margin-bottom: 8px;
+}
+
+.section-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #888;
+  margin-bottom: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.account-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.account-email {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #333;
+  padding: 8px;
+  background: rgba(46, 204, 113, 0.1);
+  border-radius: 8px;
+}
+
+.logout-btn {
+  padding: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 8px;
+  color: #666;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.logout-btn:hover {
+  background: rgba(231, 76, 60, 0.1);
+  border-color: rgba(231, 76, 60, 0.3);
+  color: #e74c3c;
+}
+
+.guest-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.guest-label {
+  font-size: 13px;
+  color: #666;
+  padding: 8px;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.guest-hint {
+  font-size: 11px;
+  color: #888;
+  text-align: center;
+  margin: 0;
+}
+
+.login-btn, .register-btn {
+  padding: 10px;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.login-btn {
+  background: rgba(0, 0, 0, 0.05);
+  color: #333;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.login-btn:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.register-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.register-btn:hover {
+  transform: scale(1.02);
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+/* ============ AUTH MODAL ============ */
+.auth-modal {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  border-radius: 20px;
+  width: 90%;
+  max-width: 360px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: modalSlideIn 0.3s ease-out;
+}
+
+.auth-header {
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.auth-header button {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 16px;
+  transition: background 0.2s;
+}
+
+.auth-header button:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.auth-content {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.auth-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  background: rgba(102, 126, 234, 0.1);
+  border-radius: 10px;
+  font-size: 12px;
+  color: #555;
+  line-height: 1.4;
+}
+
+.auth-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.auth-field label {
+  font-size: 12px;
+  color: #666;
+  font-weight: 500;
+}
+
+.auth-field input {
+  padding: 12px 14px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+  font-size: 14px;
+  transition: all 0.2s;
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.auth-field input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.auth-error {
+  background: rgba(231, 76, 60, 0.1);
+  color: #e74c3c;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  text-align: center;
+}
+
+.auth-submit-btn {
+  padding: 14px;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.auth-submit-btn:hover:not(:disabled) {
+  transform: scale(1.02);
+  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+}
+
+.auth-submit-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.auth-switch {
+  text-align: center;
+  font-size: 13px;
+  color: #666;
+}
+
+.auth-switch button {
+  background: none;
+  border: none;
+  color: #667eea;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+  font-size: 13px;
+}
+
+.auth-switch button:hover {
+  text-decoration: underline;
+}
+
+/* Dark mode auth */
+body.dark-mode .auth-modal {
+  background: rgba(30, 30, 40, 0.95);
+}
+
+body.dark-mode .auth-field label {
+  color: #aaa;
+}
+
+body.dark-mode .auth-field input {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #eee;
+}
+
+body.dark-mode .auth-notice {
+  background: rgba(102, 126, 234, 0.2);
+  color: #ccc;
+}
+
+body.dark-mode .auth-switch {
+  color: #aaa;
+}
+
+body.dark-mode .account-section {
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+body.dark-mode .account-email {
+  background: rgba(46, 204, 113, 0.2);
+  color: #eee;
+}
+
+body.dark-mode .guest-label {
+  background: rgba(255, 255, 255, 0.05);
+  color: #aaa;
+}
+
+body.dark-mode .login-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #ccc;
+}
+
+body.dark-mode .logout-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #aaa;
+}
+
+body.dark-mode .cursor-color-picker span {
+  color: #aaa;
+}

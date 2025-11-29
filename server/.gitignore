@@ -1,0 +1,12 @@
+# Data files (user data, canvas state)
+data/
+
+# Node modules
+node_modules/
+
+# Environment variables
+.env
+
+# Logs
+*.log
+npm-debug.log*

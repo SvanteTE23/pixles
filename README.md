@@ -1,43 +1,78 @@
-# r/place Clone
+# Pixles - r/place Clone
 
-A simple clone of r/place built with React (Vite) and Node.js (Express + Socket.io).
+A full-featured r/place clone with pixel shop, power-ups, and Stripe payments.
 
 ## Features
-- Real-time pixel updates using WebSockets.
-- 50x50 grid canvas.
-- Color picker to select pixel color.
-- Modern UI.
+- 🎨 Real-time pixel canvas with WebSocket sync
+- 🛒 Shop with pixel packages, power-ups, tools & cosmetics
+- 💳 Stripe payment integration
+- 👤 User accounts with login/register
+- 🌙 Dark mode support
+- 💾 Persistent data storage
 
 ## Project Structure
-- `client/`: React frontend.
-- `server/`: Node.js backend.
+- `client/` - React frontend (Vite)
+- `server/` - Node.js backend (Express + Socket.io)
 
-## Getting Started
+---
 
-### Prerequisites
-- Node.js installed.
+## 🚀 Quick Start (for new developers)
 
-### Installation
-1. Install dependencies for both client and server:
-   ```bash
-   npm run install:all
-   ```
-   (Or run `npm install` in both `client` and `server` directories manually)
+### 1. Install Node.js
+Make sure you have [Node.js](https://nodejs.org/) installed (v18+).
 
-### Running the App
-1. Start the server:
-   ```bash
-   npm run start:server
-   ```
-   The server will run on `http://localhost:3001`.
+### 2. Clone and install dependencies
+```bash
+git clone https://github.com/SvanteTE23/pixles.git
+cd pixles
+npm run install:all
+```
 
-2. Start the client:
-   ```bash
-   npm run start:client
-   ```
-   The client will run on `http://localhost:5173` (usually).
+### 3. Set up Stripe (required for payments)
+Create the file `server/.env` with your Stripe secret key:
+```
+STRIPE_SECRET_KEY=sk_test_your_stripe_key_here
+```
+> 📧 Ask Elias for the test API key!
 
-3. Open your browser and navigate to the client URL. Open multiple tabs to see real-time updates!
+### 4. Start the app
+```bash
+# Terminal 1 - Start server
+npm run start:server
 
-## Development
-- The canvas size is set to 50x50 in both `server/index.js` and `client/src/App.jsx`. If you change it, make sure to update both.
+# Terminal 2 - Start client  
+npm run start:client
+```
+
+### 5. Open in browser
+- **Local:** http://localhost:5173
+- **Network:** Check terminal output for network URL
+
+---
+
+## 📋 Commands
+
+| Command | Description |
+|---------|-------------|
+| `npm run install:all` | Install all dependencies |
+| `npm run start:server` | Start backend (port 3001) |
+| `npm run start:client` | Start frontend (port 5173) |
+
+---
+
+## 🔑 Environment Variables
+
+The server requires a `.env` file in the `server/` folder:
+
+```env
+STRIPE_SECRET_KEY=sk_test_xxxxx
+```
+
+> ⚠️ This file is NOT pushed to GitHub for security reasons.
+
+---
+
+## Development Notes
+- Canvas size: 50x50 pixels
+- Currency: SEK (Swedish Kronor)
+- Test card for Stripe: `4242 4242 4242 4242`

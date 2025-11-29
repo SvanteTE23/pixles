@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import io from 'socket.io-client';
 import './App.css';
+import { PixelIcon } from './PixelIcons';
 
 const CANVAS_SIZE = 1000; // Must match server
 const PIXEL_SIZE = 4; // Size of each pixel in visual px
@@ -8,21 +9,42 @@ const SERVER_URL = `http://${window.location.hostname}:3001`;
 const MAX_PIXELS = 10;
 const REFILL_TIME = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 
+// Generate or retrieve visitor ID
+const getVisitorId = () => {
+  let visitorId = localStorage.getItem('visitorId');
+  if (!visitorId) {
+    visitorId = 'visitor_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
+    localStorage.setItem('visitorId', visitorId);
+  }
+  return visitorId;
+};
+
+// Check if logged in
+const getLoggedInVisitorId = () => {
+  return localStorage.getItem('loggedInVisitorId');
+};
+
+// Get effective visitor ID (logged in or guest)
+const getEffectiveVisitorId = () => {
+  return getLoggedInVisitorId() || getVisitorId();
+};
+
 const INITIAL_PRESETS = [
-  '#2D2D2D', // Charcoal
-  '#FFFFFF', // White
-  '#FF6B6B', // Pastel Red
-  '#4ECDC4', // Pastel Teal/Green
-  '#45B7D1', // Pastel Blue
-  '#FFE66D', // Pastel Yellow
-  '#FF9F43', // Pastel Orange
-  '#9B59B6', // Amethyst
-  '#FF9FF3', // Pastel Pink
-  '#95A5A6', // Concrete Grey
-  '#D35400', // Pumpkin
-  '#2ECC71', // Emerald
-  '#3498DB', // Peter River
+  '#2D2D2D', '#FFFFFF', '#FF6B6B', '#4ECDC4', '#45B7D1',
+  '#FFE66D', '#FF9F43', '#9B59B6', '#FF9FF3', '#95A5A6',
+  '#D35400', '#2ECC71', '#3498DB',
 ];
+
+// Tool types
+const TOOLS = {
+  PIXEL: 'pixel',
+  BRUSH: 'brush',
+  LINE: 'line',
+  RECTANGLE: 'rectangle',
+  CIRCLE: 'circle',
+  BOMB_5: 'bomb_5',
+  BOMB_10: 'bomb_10',
+};
 
 function App() {
   const [selectedColor, setSelectedColor] = useState(INITIAL_PRESETS[0]);
@@ -50,20 +72,70 @@ function App() {
     const saved = localStorage.getItem('darkMode');
     return saved === 'true';
   });
+  
+  // Icon color based on theme
+  const iconColor = darkMode ? '#eeeeee' : '#333333';
+  
   const [displayName, setDisplayName] = useState(() => {
     return localStorage.getItem('displayName') || '';
   });
   const [displayNameInput, setDisplayNameInput] = useState(() => {
     return localStorage.getItem('displayName') || '';
   });
+  
+  // Auth state
+  const [isLoggedIn, setIsLoggedIn] = useState(() => {
+    return !!localStorage.getItem('loggedInVisitorId');
+  });
+  const [userEmail, setUserEmail] = useState(() => {
+    return localStorage.getItem('userEmail') || '';
+  });
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authMode, setAuthMode] = useState('login'); // 'login' or 'register'
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authDisplayName, setAuthDisplayName] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
+  const [requireAuthForPurchase, setRequireAuthForPurchase] = useState(false);
+  const [pendingPurchase, setPendingPurchase] = useState(null);
+  
+  // User data from server
+  const [userData, setUserData] = useState({
+    pixels: 0,
+    bombs: { 5: 0, 10: 0 },
+    canvasWipes: 0,
+    tools: [],
+    cosmetics: [],
+    cursorColor: null,
+  });
+  
+  const [isLoadingPurchase, setIsLoadingPurchase] = useState(false);
+  const [showShop, setShowShop] = useState(false);
+  const [shopTab, setShopTab] = useState('pixels'); // pixels, powerups, tools, cosmetics
+  const [paymentMessage, setPaymentMessage] = useState(null);
+  const [showPurchasedIndicator, setShowPurchasedIndicator] = useState(false);
+  const [lastPurchasedItem, setLastPurchasedItem] = useState(null);
+  
+  // Tools & Power-ups state
+  const [activeTool, setActiveTool] = useState(TOOLS.PIXEL);
+  const [showTools, setShowTools] = useState(true);
+  const [useProtectedPixel, setUseProtectedPixel] = useState(false);
+  const [drawStart, setDrawStart] = useState(null); // For line/rect/circle tools
+  const [previewPixels, setPreviewPixels] = useState([]); // Preview for tools
+  const [showWipeConfirm, setShowWipeConfirm] = useState(false);
+  const [useGlow, setUseGlow] = useState(true); // Toggle for glow effect
+  
+  // Cosmetics state
+  const [cursorColorPicker, setCursorColorPicker] = useState('#FF0000');
+  
+  const visitorId = useRef(getEffectiveVisitorId());
   const [pixelsRemaining, setPixelsRemaining] = useState(() => {
     const saved = localStorage.getItem('pixelsRemaining');
     const refillTime = localStorage.getItem('refillTime');
     if (saved !== null && refillTime) {
       const timeLeft = parseInt(refillTime) - Date.now();
-      if (timeLeft <= 0) {
-        return MAX_PIXELS;
-      }
+      if (timeLeft <= 0) return MAX_PIXELS;
       return parseInt(saved);
     }
     return MAX_PIXELS;
@@ -79,6 +151,7 @@ function App() {
 
   const isDragging = useRef(false);
   const lastMousePos = useRef({ x: 0, y: 0 });
+  const isDrawing = useRef(false);
   
   // Touch handling refs
   const touchState = useRef({
@@ -136,6 +209,54 @@ function App() {
     }
   }, [darkMode]);
 
+  // Fetch user data on load
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const response = await fetch(`${SERVER_URL}/api/user/${visitorId.current}`);
+        const data = await response.json();
+        setUserData(data);
+      } catch (error) {
+        console.error('Failed to fetch user data:', error);
+      }
+    };
+    fetchUserData();
+  }, []);
+
+  // Handle payment return
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const payment = urlParams.get('payment');
+    const sessionId = urlParams.get('session_id');
+    
+    if (payment === 'success' && sessionId) {
+      const verifyPayment = async () => {
+        try {
+          const response = await fetch(`${SERVER_URL}/api/verify-payment`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId, visitorId: visitorId.current }),
+          });
+          const data = await response.json();
+          if (data.success) {
+            setUserData(data.user);
+            if (!data.alreadyProcessed) {
+              setPaymentMessage(`Payment successful! You received: ${data.product}`);
+              setLastPurchasedItem(data.product);
+              setShowPurchasedIndicator(true);
+            }
+          }
+        } catch (error) {
+          console.error('Failed to verify payment:', error);
+        }
+      };
+      verifyPayment();
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (payment === 'cancelled') {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
+
   // Animation Loop
   useEffect(() => {
     let animationFrameId;
@@ -191,10 +312,16 @@ function App() {
     const socket = socketRef.current;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
+    
+    // Set visitor ID on server
+    socket.emit('set_visitor', { visitorId: visitorId.current });
 
     // Handle initial state
-    socket.on('initial_state', (grid) => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas
+    socket.on('initial_state', (data) => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Handle both old and new format
+      const grid = data.canvas || data;
       grid.forEach((row, y) => {
         row.forEach((color, x) => {
           if (color) {
@@ -205,11 +332,19 @@ function App() {
       });
     });
 
-    // Handle updates
-    socket.on('pixel_update', ({ x, y, color }) => {
+    // Handle single pixel updates
+    socket.on('pixel_update', ({ x, y, color, effects }) => {
       if (color) {
         ctx.fillStyle = color;
         ctx.fillRect(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE);
+        
+        // Draw glow effect
+        if (effects?.glow) {
+          ctx.shadowColor = color;
+          ctx.shadowBlur = 4;
+          ctx.fillRect(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE);
+          ctx.shadowBlur = 0;
+        }
       } else {
         ctx.clearRect(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE);
       }
@@ -220,6 +355,21 @@ function App() {
       setTimeout(() => {
         setAnimatingPixels(prev => prev.filter(p => p.id !== id));
       }, 400);
+    });
+
+    // Handle multiple pixel updates (for bombs/tools)
+    socket.on('pixels_update', ({ pixels, color }) => {
+      pixels.forEach(({ x, y }) => {
+        ctx.fillStyle = color;
+        ctx.fillRect(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE);
+      });
+    });
+
+    // Handle canvas wipe
+    socket.on('canvas_wiped', () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      setPaymentMessage('Canvas has been wiped!');
+      setTimeout(() => setPaymentMessage(null), 3000);
     });
 
     // Handle other users' cursors
@@ -250,9 +400,120 @@ function App() {
     };
   }, []);
 
-  const placePixel = (clientX, clientY) => {
-    // Check if user has pixels remaining
-    if (pixelsRemaining <= 0) return;
+  // ============ HELPER FUNCTIONS FOR TOOLS ============
+  
+  // Get pixels in a line (Bresenham's algorithm)
+  const getLinePixels = (x0, y0, x1, y1) => {
+    const pixels = [];
+    const dx = Math.abs(x1 - x0);
+    const dy = Math.abs(y1 - y0);
+    const sx = x0 < x1 ? 1 : -1;
+    const sy = y0 < y1 ? 1 : -1;
+    let err = dx - dy;
+    
+    while (true) {
+      pixels.push({ x: x0, y: y0 });
+      if (x0 === x1 && y0 === y1) break;
+      const e2 = 2 * err;
+      if (e2 > -dy) { err -= dy; x0 += sx; }
+      if (e2 < dx) { err += dx; y0 += sy; }
+    }
+    return pixels;
+  };
+  
+  // Get pixels in a rectangle
+  const getRectPixels = (x0, y0, x1, y1) => {
+    const pixels = [];
+    const minX = Math.min(x0, x1);
+    const maxX = Math.max(x0, x1);
+    const minY = Math.min(y0, y1);
+    const maxY = Math.max(y0, y1);
+    
+    for (let x = minX; x <= maxX; x++) {
+      for (let y = minY; y <= maxY; y++) {
+        pixels.push({ x, y });
+      }
+    }
+    return pixels;
+  };
+  
+  // Get pixels in a circle (Midpoint circle algorithm)
+  const getCirclePixels = (cx, cy, endX, endY) => {
+    const radius = Math.round(Math.sqrt(Math.pow(endX - cx, 2) + Math.pow(endY - cy, 2)));
+    const pixels = [];
+    
+    for (let y = -radius; y <= radius; y++) {
+      for (let x = -radius; x <= radius; x++) {
+        if (x * x + y * y <= radius * radius) {
+          pixels.push({ x: cx + x, y: cy + y });
+        }
+      }
+    }
+    return pixels;
+  };
+  
+  // Get brush pixels (3x3)
+  const getBrushPixels = (cx, cy) => {
+    const pixels = [];
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        pixels.push({ x: cx + dx, y: cy + dy });
+      }
+    }
+    return pixels;
+  };
+  
+  // Get bomb pixels (5x5 or 10x10)
+  const getBombPixels = (cx, cy, size) => {
+    const pixels = [];
+    const half = Math.floor(size / 2);
+    for (let dx = -half; dx <= half; dx++) {
+      for (let dy = -half; dy <= half; dy++) {
+        pixels.push({ x: cx + dx, y: cy + dy });
+      }
+    }
+    return pixels;
+  };
+  
+  
+
+  // ============ PIXEL CONSUMPTION ============
+  
+  const consumePixels = async (count) => {
+    // Use free pixels first
+    const freeToUse = Math.min(pixelsRemaining, count);
+    let remaining = count - freeToUse;
+    
+    if (freeToUse > 0) {
+      setPixelsRemaining(prev => prev - freeToUse);
+    }
+    
+    // Use purchased pixels for the rest
+    if (remaining > 0 && userData.pixels >= remaining) {
+      try {
+        const response = await fetch(`${SERVER_URL}/api/use-pixels`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ visitorId: visitorId.current, amount: remaining }),
+        });
+        const data = await response.json();
+        if (data.success) {
+          setUserData(prev => ({ ...prev, pixels: data.pixels }));
+        }
+      } catch (error) {
+        console.error('Failed to use pixels:', error);
+        return false;
+      }
+    }
+    
+    return true;
+  };
+
+  const placePixel = async (clientX, clientY) => {
+    const hasFreePixels = pixelsRemaining > 0;
+    const hasPurchasedPixels = userData.pixels > 0;
+    
+    if (!hasFreePixels && !hasPurchasedPixels) return;
     
     const canvas = canvasRef.current;
     const rect = canvas.getBoundingClientRect();
@@ -264,43 +525,230 @@ function App() {
     const y = Math.floor((clientY - rect.top) * scaleY / PIXEL_SIZE);
 
     if (x >= 0 && x < CANVAS_SIZE && y >= 0 && y < CANVAS_SIZE) {
-      socketRef.current.emit('place_pixel', { x, y, color: selectedColor });
-      setPixelsRemaining(prev => prev - 1);
+      const color = selectedColor;
+      const effects = {};
+      if (userData.cosmetics.includes('glow') && useGlow) effects.glow = true;
+      
+      socketRef.current.emit('place_pixel', { 
+        x, y, color, 
+        effects: Object.keys(effects).length > 0 ? effects : undefined
+      });
+      
+      // Clear messages
+      if (paymentMessage) setPaymentMessage(null);
+      if (showPurchasedIndicator) setShowPurchasedIndicator(false);
+      
+      // Consume pixels and protected pixel if used
+      if (hasFreePixels) {
+        setPixelsRemaining(prev => prev - 1);
+      } else if (hasPurchasedPixels) {
+        try {
+          const response = await fetch(`${SERVER_URL}/api/use-pixels`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ visitorId: visitorId.current, amount: 1 }),
+          });
+          const data = await response.json();
+          if (data.success) {
+            setUserData(prev => ({ ...prev, pixels: data.pixels }));
+          }
+        } catch (error) {
+          console.error('Failed to use purchased pixel:', error);
+        }
+      }
     }
+  };
+  
+  // Place multiple pixels (for tools)
+  const placeMultiplePixels = async (pixels) => {
+    const totalCost = pixels.length;
+    const totalAvailable = pixelsRemaining + userData.pixels;
+    
+    if (totalCost > totalAvailable) {
+      setPaymentMessage(`Need ${totalCost} pixels, but only have ${totalAvailable}`);
+      setTimeout(() => setPaymentMessage(null), 2000);
+      return;
+    }
+    
+    const color = selectedColor;
+    const effects = {};
+    if (userData.cosmetics.includes('glow') && useGlow) effects.glow = true;
+    
+    // Filter valid pixels
+    const validPixels = pixels.filter(p => p.x >= 0 && p.x < CANVAS_SIZE && p.y >= 0 && p.y < CANVAS_SIZE);
+    
+    socketRef.current.emit('place_pixels', {
+      pixels: validPixels,
+      color,
+      effects: Object.keys(effects).length > 0 ? effects : undefined
+    });
+    
+    await consumePixels(validPixels.length);
+    setPreviewPixels([]);
+  };
+  
+  // Use bomb
+  const useBomb = async (x, y, size) => {
+    if (!userData.bombs[size] || userData.bombs[size] <= 0) {
+      setPaymentMessage(`No ${size}×${size} bombs available!`);
+      setTimeout(() => setPaymentMessage(null), 2000);
+      return;
+    }
+    
+    try {
+      const response = await fetch(`${SERVER_URL}/api/use-bomb`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visitorId: visitorId.current, size }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setUserData(prev => ({ ...prev, bombs: data.bombs }));
+        
+        const color = selectedColor;
+        const pixels = getBombPixels(x, y, size);
+        
+        socketRef.current.emit('place_pixels', {
+          pixels,
+          color,
+          isProtected: false,
+          effects: userData.cosmetics.includes('glow') ? { glow: true } : undefined
+        });
+        
+        setPaymentMessage(`BOOM! Placed ${size}×${size} bomb!`);
+        setTimeout(() => setPaymentMessage(null), 2000);
+      }
+    } catch (error) {
+      console.error('Failed to use bomb:', error);
+    }
+    
+    setActiveTool(TOOLS.PIXEL);
+    setPreviewPixels([]);
+  };
+  
+  // Canvas wipe
+  const performCanvasWipe = async () => {
+    if (!userData.canvasWipes || userData.canvasWipes <= 0) {
+      setPaymentMessage('No canvas wipes available!');
+      setTimeout(() => setPaymentMessage(null), 2000);
+      return;
+    }
+    
+    try {
+      const response = await fetch(`${SERVER_URL}/api/canvas-wipe`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visitorId: visitorId.current }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setUserData(prev => ({ ...prev, canvasWipes: data.canvasWipes }));
+      }
+    } catch (error) {
+      console.error('Failed to wipe canvas:', error);
+    }
+    
+    setShowWipeConfirm(false);
   };
 
   const handleCanvasClick = (e) => {
-    // Only allow left click for painting
     if (e.button !== 0) return;
-    
-    // If we were dragging (panning), don't paint
     if (isDragging.current) return;
 
-    if (isEyedropperActive) {
-      // Eyedropper logic
-      const canvas = canvasRef.current;
-      const rect = canvas.getBoundingClientRect();
-      const scaleX = canvas.width / rect.width;
-      const scaleY = canvas.height / rect.height;
-      const x = Math.floor((e.clientX - rect.left) * scaleX / PIXEL_SIZE);
-      const y = Math.floor((e.clientY - rect.top) * scaleY / PIXEL_SIZE);
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = Math.floor((e.clientX - rect.left) * scaleX / PIXEL_SIZE);
+    const y = Math.floor((e.clientY - rect.top) * scaleY / PIXEL_SIZE);
 
-      // We need to get the color from the canvas context or server state
-      // Since we don't have the full grid state in a variable easily accessible here without prop drilling or context,
-      // we can read from the canvas itself.
+    if (isEyedropperActive) {
       const ctx = canvas.getContext('2d');
       const pixelData = ctx.getImageData(x * PIXEL_SIZE, y * PIXEL_SIZE, 1, 1).data;
-      
-      // If transparent (alpha 0), don't pick
       if (pixelData[3] === 0) return;
-
       const hex = "#" + ((1 << 24) + (pixelData[0] << 16) + (pixelData[1] << 8) + pixelData[2]).toString(16).slice(1).toUpperCase();
       setSelectedColor(hex);
       setIsEyedropperActive(false);
       return;
     }
-
-    placePixel(e.clientX, e.clientY);
+    
+    // Handle different tools
+    switch (activeTool) {
+      case TOOLS.PIXEL:
+        placePixel(e.clientX, e.clientY);
+        break;
+      case TOOLS.BRUSH:
+        if (userData.tools.includes('brush')) {
+          const pixels = getBrushPixels(x, y);
+          placeMultiplePixels(pixels);
+        }
+        break;
+      case TOOLS.BOMB_5:
+        useBomb(x, y, 5);
+        break;
+      case TOOLS.BOMB_10:
+        useBomb(x, y, 10);
+        break;
+      case TOOLS.LINE:
+      case TOOLS.RECTANGLE:
+      case TOOLS.CIRCLE:
+        // These are handled by mouse down/up
+        break;
+      default:
+        placePixel(e.clientX, e.clientY);
+    }
+  };
+  
+  // Handle tool drawing (mouse down for line/rect/circle)
+  const handleToolMouseDown = (e) => {
+    if (e.button !== 0) return;
+    if (![TOOLS.LINE, TOOLS.RECTANGLE, TOOLS.CIRCLE].includes(activeTool)) return;
+    
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = Math.floor((e.clientX - rect.left) * scaleX / PIXEL_SIZE);
+    const y = Math.floor((e.clientY - rect.top) * scaleY / PIXEL_SIZE);
+    
+    setDrawStart({ x, y });
+    isDrawing.current = true;
+  };
+  
+  const handleToolMouseMove = (e) => {
+    if (!isDrawing.current || !drawStart) return;
+    
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = Math.floor((e.clientX - rect.left) * scaleX / PIXEL_SIZE);
+    const y = Math.floor((e.clientY - rect.top) * scaleY / PIXEL_SIZE);
+    
+    let pixels = [];
+    switch (activeTool) {
+      case TOOLS.LINE:
+        pixels = getLinePixels(drawStart.x, drawStart.y, x, y);
+        break;
+      case TOOLS.RECTANGLE:
+        pixels = getRectPixels(drawStart.x, drawStart.y, x, y);
+        break;
+      case TOOLS.CIRCLE:
+        pixels = getCirclePixels(drawStart.x, drawStart.y, x, y);
+        break;
+    }
+    setPreviewPixels(pixels);
+  };
+  
+  const handleToolMouseUp = (e) => {
+    if (!isDrawing.current || !drawStart) return;
+    isDrawing.current = false;
+    
+    if (previewPixels.length > 0) {
+      placeMultiplePixels(previewPixels);
+    }
+    
+    setDrawStart(null);
   };
 
   // Touch Handlers
@@ -432,10 +880,15 @@ function App() {
       isDragging.current = true;
       lastMousePos.current = { x: e.clientX, y: e.clientY };
     }
+    // Left click for tools
+    if (e.button === 0) {
+      handleToolMouseDown(e);
+    }
   };
 
-  const handleMouseUp = () => {
+  const handleMouseUp = (e) => {
     isDragging.current = false;
+    handleToolMouseUp(e);
   };
 
   const handleMouseMove = (e) => {
@@ -444,18 +897,18 @@ function App() {
       const dx = e.clientX - lastMousePos.current.x;
       const dy = e.clientY - lastMousePos.current.y;
       
-      // Update targets
       targetTransform.current.x += dx;
       targetTransform.current.y += dy;
-      
-      // Instant update for current transform to avoid lag during pan
       currentTransform.current.x += dx;
       currentTransform.current.y += dy;
-      
-      // Force state update for responsiveness
       setOffset({ x: currentTransform.current.x, y: currentTransform.current.y });
       
       lastMousePos.current = { x: e.clientX, y: e.clientY };
+    }
+    
+    // Tool drawing preview
+    if (isDrawing.current && drawStart) {
+      handleToolMouseMove(e);
     }
 
     // Hover Logic
@@ -470,9 +923,25 @@ function App() {
 
       if (x >= 0 && x < CANVAS_SIZE && y >= 0 && y < CANVAS_SIZE) {
         setHoveredPixel({ x, y });
-        // Emit cursor position to server
+        
+        // Update preview for bombs
+        if (activeTool === TOOLS.BOMB_5 || activeTool === TOOLS.BOMB_10) {
+          const size = activeTool === TOOLS.BOMB_5 ? 5 : 10;
+          setPreviewPixels(getBombPixels(x, y, size));
+        } else if (activeTool === TOOLS.BRUSH && !isDrawing.current) {
+          setPreviewPixels(getBrushPixels(x, y));
+        } else if (!isDrawing.current && ![TOOLS.LINE, TOOLS.RECTANGLE, TOOLS.CIRCLE].includes(activeTool)) {
+          setPreviewPixels([]);
+        }
+        
+        // Emit cursor position
         if (socketRef.current) {
-          socketRef.current.emit('cursor_move', { x, y, name: displayName });
+          socketRef.current.emit('cursor_move', { 
+            x, y, 
+            name: displayName,
+            cosmetics: userData.cosmetics,
+            cursorColor: userData.cursorColor
+          });
         }
       } else {
         setHoveredPixel(null);
@@ -509,6 +978,181 @@ function App() {
     }
   };
 
+  // Purchase item
+  const purchaseItem = async (productId) => {
+    // Require account for purchases
+    if (!isLoggedIn) {
+      setPendingPurchase(productId);
+      setRequireAuthForPurchase(true);
+      setShowAuthModal(true);
+      setAuthMode('register');
+      return;
+    }
+    
+    setIsLoadingPurchase(true);
+    try {
+      const response = await fetch(`${SERVER_URL}/api/create-checkout-session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId, visitorId: visitorId.current }),
+      });
+      const data = await response.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        alert('Could not start payment: ' + (data.error || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Purchase error:', error);
+      alert('Could not start payment. Please try again.');
+    }
+    setIsLoadingPurchase(false);
+  };
+  
+  // Set custom cursor color
+  const setCustomCursorColor = async (color) => {
+    try {
+      const response = await fetch(`${SERVER_URL}/api/set-cursor-color`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visitorId: visitorId.current, color }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setUserData(prev => ({ ...prev, cursorColor: color }));
+      }
+    } catch (error) {
+      console.error('Failed to set cursor color:', error);
+    }
+  };
+  
+  // Auth functions
+  const handleLogin = async () => {
+    setAuthError('');
+    setAuthLoading(true);
+    
+    try {
+      const response = await fetch(`${SERVER_URL}/api/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          email: authEmail, 
+          password: authPassword,
+          currentVisitorId: getVisitorId()
+        }),
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        // Update visitor ID to the account's visitor ID
+        localStorage.setItem('loggedInVisitorId', data.visitorId);
+        localStorage.setItem('userEmail', authEmail);
+        if (data.displayName) {
+          localStorage.setItem('displayName', data.displayName);
+          setDisplayName(data.displayName);
+          setDisplayNameInput(data.displayName);
+        }
+        
+        visitorId.current = data.visitorId;
+        setIsLoggedIn(true);
+        setUserEmail(authEmail);
+        setUserData(data.user);
+        setShowAuthModal(false);
+        setAuthEmail('');
+        setAuthPassword('');
+        
+        // Reconnect socket with new visitor ID
+        if (socketRef.current) {
+          socketRef.current.emit('set_visitor', { visitorId: data.visitorId });
+        }
+        
+        // If there was a pending purchase, continue
+        if (pendingPurchase) {
+          purchaseItem(pendingPurchase);
+          setPendingPurchase(null);
+        }
+      } else {
+        setAuthError(data.error || 'Login failed');
+      }
+    } catch (error) {
+      setAuthError('Connection error. Try again.');
+    }
+    
+    setAuthLoading(false);
+  };
+  
+  const handleRegister = async () => {
+    setAuthError('');
+    setAuthLoading(true);
+    
+    try {
+      const response = await fetch(`${SERVER_URL}/api/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          email: authEmail, 
+          password: authPassword,
+          displayName: authDisplayName,
+          visitorId: getVisitorId() // Use current guest ID so purchases transfer
+        }),
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        // Log them in automatically
+        localStorage.setItem('loggedInVisitorId', getVisitorId());
+        localStorage.setItem('userEmail', authEmail);
+        if (authDisplayName) {
+          localStorage.setItem('displayName', authDisplayName);
+          setDisplayName(authDisplayName);
+          setDisplayNameInput(authDisplayName);
+        }
+        
+        setIsLoggedIn(true);
+        setUserEmail(authEmail);
+        setUserData(data.user);
+        setShowAuthModal(false);
+        setAuthEmail('');
+        setAuthPassword('');
+        setAuthDisplayName('');
+        
+        // If there was a pending purchase, continue
+        if (pendingPurchase) {
+          purchaseItem(pendingPurchase);
+          setPendingPurchase(null);
+        }
+      } else {
+        setAuthError(data.error || 'Registration failed');
+      }
+    } catch (error) {
+      setAuthError('Connection error. Try again.');
+    }
+    
+    setAuthLoading(false);
+  };
+  
+  const handleLogout = () => {
+    localStorage.removeItem('loggedInVisitorId');
+    localStorage.removeItem('userEmail');
+    setIsLoggedIn(false);
+    setUserEmail('');
+    
+    // Generate new guest ID and reload data
+    const newGuestId = 'visitor_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
+    localStorage.setItem('visitorId', newGuestId);
+    visitorId.current = newGuestId;
+    
+    // Fetch guest user data
+    fetch(`${SERVER_URL}/api/user/${newGuestId}`)
+      .then(res => res.json())
+      .then(data => setUserData(data));
+    
+    // Update socket
+    if (socketRef.current) {
+      socketRef.current.emit('set_visitor', { visitorId: newGuestId });
+    }
+  };
+
   return (
     <div className="app-container">
       <div className="pixels-counter">
@@ -516,17 +1160,61 @@ function App() {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
             <rect x="4" y="4" width="16" height="16" rx="2"/>
           </svg>
-          <span className={pixelsRemaining === 0 ? 'zero' : ''}>{pixelsRemaining}</span>
+          <span className={pixelsRemaining === 0 && userData.pixels === 0 ? 'zero' : ''}>
+            {pixelsRemaining + userData.pixels}
+          </span>
+          {showPurchasedIndicator && lastPurchasedItem && (
+            <span className="purchased-indicator" title="Last purchase">
+              (+{lastPurchasedItem})
+            </span>
+          )}
+          <button 
+            className="buy-pixels-btn"
+            onClick={() => setShowShop(true)}
+            title="Shop"
+          >
+            <PixelIcon name="cart" size={16} />
+          </button>
         </div>
-        {pixelsRemaining === 0 && (
+        {/* Power-ups indicator */}
+        <div className="powerups-indicator">
+          {userData.bombs[5] > 0 && (
+            <span className="powerup-badge" title="5×5 Bombs" onClick={() => setActiveTool(TOOLS.BOMB_5)}>
+              <PixelIcon name="bomb" size={14} />5×{userData.bombs[5]}
+            </span>
+          )}
+          {userData.bombs[10] > 0 && (
+            <span className="powerup-badge" title="10×10 Bombs" onClick={() => setActiveTool(TOOLS.BOMB_10)}>
+              <PixelIcon name="bomb" size={14} />10×{userData.bombs[10]}
+            </span>
+          )}
+          {userData.canvasWipes > 0 && (
+            <span className="powerup-badge wipe" title="Canvas wipe" onClick={() => setShowWipeConfirm(true)}>
+              <PixelIcon name="broom" size={14} />{userData.canvasWipes}
+            </span>
+          )}
+        </div>
+        {pixelsRemaining === 0 && userData.pixels === 0 && (
           <div className="pixels-depleted">
             <span>No pixels left!</span>
             {timeUntilRefill > 0 && (
               <span className="refill-timer-inline">{formatTime(timeUntilRefill)} until refill</span>
             )}
+            <button 
+              className="buy-now-btn"
+              onClick={() => setShowShop(true)}
+            >
+              Buy more
+            </button>
           </div>
         )}
       </div>
+      {paymentMessage && (
+        <div className="payment-success-message">
+          <span>✓ {paymentMessage}</span>
+          <button onClick={() => setPaymentMessage(null)}>×</button>
+        </div>
+      )}
       <div 
         className="viewport"
         ref={containerRef}
@@ -603,6 +1291,21 @@ function App() {
               }}
             />
           )}
+          {/* Tool preview pixels */}
+          {previewPixels.map((p, i) => (
+            <div
+              key={i}
+              className="pixel-preview"
+              style={{
+                left: p.x * PIXEL_SIZE,
+                top: p.y * PIXEL_SIZE,
+                width: PIXEL_SIZE,
+                height: PIXEL_SIZE,
+                backgroundColor: selectedColor,
+                opacity: 0.5
+              }}
+            />
+          ))}
           {/* Other users' cursors */}
           {Object.entries(otherCursors).map(([id, cursor]) => (
             <div
@@ -622,25 +1325,123 @@ function App() {
                   shapeRendering: 'crispEdges'
                 }}
               >
-                <rect x="2" y="0" width="1" height="2" fill={cursor.color}/>
-                <rect x="0" y="2" width="2" height="1" fill={cursor.color}/>
-                <rect x="2" y="2" width="1" height="1" fill={cursor.color}/>
-                <rect x="3" y="2" width="2" height="1" fill={cursor.color}/>
-                <rect x="2" y="3" width="1" height="2" fill={cursor.color}/>
+                <rect x="2" y="0" width="1" height="2" fill={cursor.cursorColor || cursor.color}/>
+                <rect x="0" y="2" width="2" height="1" fill={cursor.cursorColor || cursor.color}/>
+                <rect x="2" y="2" width="1" height="1" fill={cursor.cursorColor || cursor.color}/>
+                <rect x="3" y="2" width="2" height="1" fill={cursor.cursorColor || cursor.color}/>
+                <rect x="2" y="3" width="1" height="2" fill={cursor.cursorColor || cursor.color}/>
               </svg>
               {cursor.name && (
                 <div 
-                  className="cursor-name"
+                  className={`cursor-name ${cursor.cosmetics?.includes('animatedName') ? 'animated-name' : ''}`}
                   style={{ 
-                    color: cursor.color,
+                    color: cursor.cursorColor || cursor.color,
                     transform: `translate(-50%, ${PIXEL_SIZE / 2 + 2}px) scale(${1/zoom})`
                   }}
                 >
+                  {cursor.cosmetics?.includes('vip') && <span className="vip-badge"><PixelIcon name="crown" size={10} color="#FFD700" /></span>}
                   {cursor.name}
                 </div>
               )}
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Tools Sidebar */}
+      <div className={`tools-sidebar ${showTools ? 'open' : ''}`}>
+        <button className="tools-toggle" onClick={() => setShowTools(!showTools)}>
+          🔧
+        </button>
+        <div className="tools-content">
+          <div className="tool-section">
+            <div className="section-label">Tools</div>
+            <button 
+              className={`tool-btn ${activeTool === TOOLS.PIXEL ? 'active' : ''}`}
+              onClick={() => { setActiveTool(TOOLS.PIXEL); setPreviewPixels([]); }}
+              title="Single Pixel"
+            >
+              <span><PixelIcon name="pencil" size={16} /></span>
+              <span>Pixel</span>
+            </button>
+            <button 
+              className={`tool-btn ${activeTool === TOOLS.BRUSH ? 'active' : ''} ${!userData.tools.includes('brush') ? 'locked' : ''}`}
+              onClick={() => userData.tools.includes('brush') && setActiveTool(TOOLS.BRUSH)}
+              title={userData.tools.includes('brush') ? "Brush 3×3" : "Purchase to unlock"}
+            >
+              <span><PixelIcon name="brush" size={16} /></span>
+              <span>Brush</span>
+              {!userData.tools.includes('brush') && <span className="lock-icon"><PixelIcon name="lock" size={12} /></span>}
+            </button>
+            <button 
+              className={`tool-btn ${activeTool === TOOLS.LINE ? 'active' : ''} ${!userData.tools.includes('line') ? 'locked' : ''}`}
+              onClick={() => userData.tools.includes('line') && setActiveTool(TOOLS.LINE)}
+              title={userData.tools.includes('line') ? "Line Tool" : "Purchase to unlock"}
+            >
+              <span><PixelIcon name="line" size={16} /></span>
+              <span>Line</span>
+              {!userData.tools.includes('line') && <span className="lock-icon"><PixelIcon name="lock" size={12} /></span>}
+            </button>
+            <button 
+              className={`tool-btn ${activeTool === TOOLS.RECTANGLE ? 'active' : ''} ${!userData.tools.includes('rectangle') ? 'locked' : ''}`}
+              onClick={() => userData.tools.includes('rectangle') && setActiveTool(TOOLS.RECTANGLE)}
+              title={userData.tools.includes('rectangle') ? "Rectangle Tool" : "Purchase to unlock"}
+            >
+              <span><PixelIcon name="rectangle" size={16} /></span>
+              <span>Rect</span>
+              {!userData.tools.includes('rectangle') && <span className="lock-icon"><PixelIcon name="lock" size={12} /></span>}
+            </button>
+            <button 
+              className={`tool-btn ${activeTool === TOOLS.CIRCLE ? 'active' : ''} ${!userData.tools.includes('circle') ? 'locked' : ''}`}
+              onClick={() => userData.tools.includes('circle') && setActiveTool(TOOLS.CIRCLE)}
+              title={userData.tools.includes('circle') ? "Circle Tool" : "Purchase to unlock"}
+            >
+              <span><PixelIcon name="circle" size={16} /></span>
+              <span>Circle</span>
+              {!userData.tools.includes('circle') && <span className="lock-icon"><PixelIcon name="lock" size={12} /></span>}
+            </button>
+          </div>
+          
+          {(userData.bombs[5] > 0 || userData.bombs[10] > 0) && (
+            <div className="tool-section">
+              <div className="section-label">Power-ups</div>
+              {userData.bombs[5] > 0 && (
+                <button 
+                  className={`tool-btn powerup ${activeTool === TOOLS.BOMB_5 ? 'active' : ''}`}
+                  onClick={() => setActiveTool(TOOLS.BOMB_5)}
+                  title="5×5 Bomb"
+                >
+                  <span><PixelIcon name="bomb" size={16} /></span>
+                  <span>5×5 ({userData.bombs[5]})</span>
+                </button>
+              )}
+              {userData.bombs[10] > 0 && (
+                <button 
+                  className={`tool-btn powerup ${activeTool === TOOLS.BOMB_10 ? 'active' : ''}`}
+                  onClick={() => setActiveTool(TOOLS.BOMB_10)}
+                  title="10×10 Bomb"
+                >
+                  <span><PixelIcon name="bomb" size={16} /></span>
+                  <span>10×10 ({userData.bombs[10]})</span>
+                </button>
+              )}
+            </div>
+          )}
+          
+          {/* Cosmetics/Effects Section */}
+          {userData.cosmetics.includes('glow') && (
+            <div className="tool-section">
+              <div className="section-label">Effects</div>
+              <button 
+                className={`tool-btn effect ${useGlow ? 'active' : ''}`}
+                onClick={() => setUseGlow(!useGlow)}
+                title="Toggle glow effect"
+              >
+                <span><PixelIcon name="sparkle" size={16} /></span>
+                <span>Glow {useGlow ? 'ON' : 'OFF'}</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -681,9 +1482,7 @@ function App() {
             onClick={() => setIsEyedropperActive(!isEyedropperActive)}
             title="Pick color from canvas"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M17.293 3.293a1 1 0 0 1 1.414 0l2 2a1 1 0 0 1 0 1.414L9 18.414 3 21l2.586-6 11.707-11.707z"/>
-            </svg>
+            <PixelIcon name="eyedropper" size={18} />
           </button>
           <input 
             type="color" 
@@ -712,7 +1511,7 @@ function App() {
         onClick={() => setIsAdminOpen(!isAdminOpen)}
         title="Settings"
       >
-        ⚙️
+        ⚙
       </button>
 
       {isAdminOpen && (
@@ -720,6 +1519,34 @@ function App() {
           <div className="admin-header">
             <span>Settings</span>
             <button onClick={() => { setIsAdminOpen(false); setIsAdminAuthenticated(false); setAdminPassword(''); setAdminPasswordError(false); }}>×</button>
+          </div>
+          
+          {/* Account Section */}
+          <div className="settings-section account-section">
+            <div className="section-title">Account</div>
+            {isLoggedIn ? (
+              <div className="account-info">
+                <div className="account-email">
+                  <PixelIcon name="check" size={14} color="#2ecc71" /> {userEmail}
+                </div>
+                <button className="logout-btn" onClick={handleLogout}>
+                  Log out
+                </button>
+              </div>
+            ) : (
+              <div className="guest-info">
+                <div className="guest-label">
+                  Playing as Guest
+                </div>
+                <p className="guest-hint">Create an account to save your purchases across devices!</p>
+                <button className="login-btn" onClick={() => { setShowAuthModal(true); setAuthMode('login'); setRequireAuthForPurchase(false); }}>
+                  Log in
+                </button>
+                <button className="register-btn" onClick={() => { setShowAuthModal(true); setAuthMode('register'); setRequireAuthForPurchase(false); }}>
+                  Create Account
+                </button>
+              </div>
+            )}
           </div>
           
           {/* General Settings */}
@@ -730,7 +1557,7 @@ function App() {
                 <input
                   type="text"
                   className="display-name-input"
-                  placeholder="Enter name..."
+                  placeholder={isLoggedIn ? "Enter name..." : "Guest"}
                   value={displayNameInput}
                   onChange={(e) => setDisplayNameInput(e.target.value)}
                   onKeyDown={(e) => {
@@ -828,6 +1655,320 @@ function App() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Shop Modal */}
+      {showShop && (
+        <div className="shop-overlay" onClick={() => setShowShop(false)}>
+          <div className="shop-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="shop-header">
+              <span><PixelIcon name="cart" size={18} /> Shop</span>
+              <button onClick={() => setShowShop(false)}><PixelIcon name="close" size={14} /></button>
+            </div>
+            
+            {/* Shop Tabs */}
+            <div className="shop-tabs">
+              <button 
+                className={shopTab === 'pixels' ? 'active' : ''} 
+                onClick={() => setShopTab('pixels')}
+              >
+                Pixels
+              </button>
+              <button 
+                className={shopTab === 'powerups' ? 'active' : ''} 
+                onClick={() => setShopTab('powerups')}
+              >
+                Power-ups
+              </button>
+              <button 
+                className={shopTab === 'tools' ? 'active' : ''} 
+                onClick={() => setShopTab('tools')}
+              >
+                Tools
+              </button>
+              <button 
+                className={shopTab === 'cosmetics' ? 'active' : ''} 
+                onClick={() => setShopTab('cosmetics')}
+              >
+                Cosmetics
+              </button>
+            </div>
+            
+            <div className="shop-content">
+              {/* PIXELS TAB */}
+              {shopTab === 'pixels' && (
+                <>
+                  <p className="shop-description">Buy extra pixels to place instantly!</p>
+                  <div className="shop-packages">
+                    <button className="package-btn" onClick={() => purchaseItem('pixels_10')} disabled={isLoadingPurchase}>
+                      <span className="package-pixels">10 Pixels</span>
+                      <span className="package-price">5 kr</span>
+                    </button>
+                    <button className="package-btn" onClick={() => purchaseItem('pixels_50')} disabled={isLoadingPurchase}>
+                      <span className="package-pixels">50 Pixels</span>
+                      <span className="package-price">20 kr</span>
+                      <span className="package-savings">Save 20%</span>
+                    </button>
+                    <button className="package-btn popular" onClick={() => purchaseItem('pixels_150')} disabled={isLoadingPurchase}>
+                      <span className="package-badge">Popular!</span>
+                      <span className="package-pixels">150 Pixels</span>
+                      <span className="package-price">45 kr</span>
+                      <span className="package-savings">Save 40%</span>
+                    </button>
+                    <button className="package-btn best-value" onClick={() => purchaseItem('pixels_500')} disabled={isLoadingPurchase}>
+                      <span className="package-badge">Best value!</span>
+                      <span className="package-pixels">500 Pixels</span>
+                      <span className="package-price">125 kr</span>
+                      <span className="package-savings">Save 50%</span>
+                    </button>
+                    <button className="package-btn mega" onClick={() => purchaseItem('pixels_1000')} disabled={isLoadingPurchase}>
+                      <span className="package-badge"><PixelIcon name="fire" size={12} /> MEGA!</span>
+                      <span className="package-pixels">1000 Pixels</span>
+                      <span className="package-price">200 kr</span>
+                      <span className="package-savings">Save 60%</span>
+                    </button>
+                  </div>
+                </>
+              )}
+              
+              {/* POWER-UPS TAB */}
+              {shopTab === 'powerups' && (
+                <>
+                  <p className="shop-description">Powerful tools to dominate the canvas!</p>
+                  <div className="shop-packages powerups">
+                    <button className="package-btn bomb" onClick={() => purchaseItem('bomb_5x5')} disabled={isLoadingPurchase}>
+                      <span className="package-emoji"><PixelIcon name="bomb" size={24} /></span>
+                      <span className="package-pixels">Pixel Bomb 5×5</span>
+                      <span className="package-desc">Fill a 5×5 area instantly!</span>
+                      <span className="package-price">25 kr</span>
+                    </button>
+                    <button className="package-btn bomb" onClick={() => purchaseItem('bomb_10x10')} disabled={isLoadingPurchase}>
+                      <span className="package-emoji"><PixelIcon name="bomb" size={24} /></span>
+                      <span className="package-pixels">Pixel Bomb 10×10</span>
+                      <span className="package-desc">Fill a 10×10 area instantly!</span>
+                      <span className="package-price">50 kr</span>
+                    </button>
+                    <button className="package-btn wipe" onClick={() => purchaseItem('canvas_wipe')} disabled={isLoadingPurchase}>
+                      <span className="package-emoji"><PixelIcon name="broom" size={24} /></span>
+                      <span className="package-pixels">Canvas Wipe</span>
+                      <span className="package-desc">Clear the ENTIRE canvas!</span>
+                      <span className="package-price">500 kr</span>
+                    </button>
+                  </div>
+                </>
+              )}
+              
+              {/* TOOLS TAB */}
+              {shopTab === 'tools' && (
+                <>
+                  <p className="shop-description">Unlock powerful drawing tools forever!</p>
+                  <div className="shop-packages tools">
+                    <button 
+                      className={`package-btn tool ${userData.tools.includes('brush') ? 'owned' : ''}`} 
+                      onClick={() => !userData.tools.includes('brush') && purchaseItem('tool_brush')} 
+                      disabled={isLoadingPurchase || userData.tools.includes('brush')}
+                    >
+                      <span className="package-emoji"><PixelIcon name="brush" size={24} /></span>
+                      <span className="package-pixels">Brush 3×3</span>
+                      <span className="package-desc">Paint 3×3 pixels at once</span>
+                      <span className="package-price">{userData.tools.includes('brush') ? '✓ Owned' : '15 kr'}</span>
+                    </button>
+                    <button 
+                      className={`package-btn tool ${userData.tools.includes('line') ? 'owned' : ''}`} 
+                      onClick={() => !userData.tools.includes('line') && purchaseItem('tool_line')} 
+                      disabled={isLoadingPurchase || userData.tools.includes('line')}
+                    >
+                      <span className="package-emoji"><PixelIcon name="line" size={24} /></span>
+                      <span className="package-pixels">Line Tool</span>
+                      <span className="package-desc">Draw straight lines easily</span>
+                      <span className="package-price">{userData.tools.includes('line') ? '✓ Owned' : '20 kr'}</span>
+                    </button>
+                    <button 
+                      className={`package-btn tool ${userData.tools.includes('rectangle') ? 'owned' : ''}`} 
+                      onClick={() => !userData.tools.includes('rectangle') && purchaseItem('tool_rect')} 
+                      disabled={isLoadingPurchase || userData.tools.includes('rectangle')}
+                    >
+                      <span className="package-emoji"><PixelIcon name="rectangle" size={24} /></span>
+                      <span className="package-pixels">Rectangle Tool</span>
+                      <span className="package-desc">Draw rectangles and squares</span>
+                      <span className="package-price">{userData.tools.includes('rectangle') ? '✓ Owned' : '25 kr'}</span>
+                    </button>
+                    <button 
+                      className={`package-btn tool ${userData.tools.includes('circle') ? 'owned' : ''}`} 
+                      onClick={() => !userData.tools.includes('circle') && purchaseItem('tool_circle')} 
+                      disabled={isLoadingPurchase || userData.tools.includes('circle')}
+                    >
+                      <span className="package-emoji"><PixelIcon name="circle" size={24} /></span>
+                      <span className="package-pixels">Circle Tool</span>
+                      <span className="package-desc">Draw circles of any size</span>
+                      <span className="package-price">{userData.tools.includes('circle') ? '✓ Owned' : '30 kr'}</span>
+                    </button>
+                  </div>
+                </>
+              )}
+              
+              {/* COSMETICS TAB */}
+              {shopTab === 'cosmetics' && (
+                <>
+                  <p className="shop-description">Stand out from the crowd!</p>
+                  <div className="shop-packages cosmetics">
+                    <button 
+                      className={`package-btn cosmetic ${userData.cosmetics.includes('glow') ? 'owned' : ''}`} 
+                      onClick={() => !userData.cosmetics.includes('glow') && purchaseItem('glow_effect')} 
+                      disabled={isLoadingPurchase || userData.cosmetics.includes('glow')}
+                    >
+                      <span className="package-emoji"><PixelIcon name="sparkle" size={24} /></span>
+                      <span className="package-pixels">Glow Effect</span>
+                      <span className="package-desc">Your pixels glow and stand out</span>
+                      <span className="package-price">{userData.cosmetics.includes('glow') ? '✓ Owned' : '20 kr'}</span>
+                    </button>
+                    <button 
+                      className={`package-btn cosmetic ${userData.cosmetics.includes('vip') ? 'owned' : ''}`} 
+                      onClick={() => !userData.cosmetics.includes('vip') && purchaseItem('vip_badge')} 
+                      disabled={isLoadingPurchase || userData.cosmetics.includes('vip')}
+                    >
+                      <span className="package-emoji"><PixelIcon name="crown" size={24} color="#FFD700" /></span>
+                      <span className="package-pixels">VIP Badge</span>
+                      <span className="package-desc">Show off your VIP status</span>
+                      <span className="package-price">{userData.cosmetics.includes('vip') ? '✓ Owned' : '50 kr'}</span>
+                    </button>
+                    <button 
+                      className={`package-btn cosmetic ${userData.cosmetics.includes('animatedName') ? 'owned' : ''}`} 
+                      onClick={() => !userData.cosmetics.includes('animatedName') && purchaseItem('animated_name')} 
+                      disabled={isLoadingPurchase || userData.cosmetics.includes('animatedName')}
+                    >
+                      <span className="package-emoji"><PixelIcon name="mask" size={24} /></span>
+                      <span className="package-pixels">Animated Name</span>
+                      <span className="package-desc">Your name animates in rainbow</span>
+                      <span className="package-price">{userData.cosmetics.includes('animatedName') ? '✓ Owned' : '25 kr'}</span>
+                    </button>
+                    <button 
+                      className={`package-btn cosmetic ${userData.cosmetics.includes('customCursor') ? 'owned' : ''}`} 
+                      onClick={() => !userData.cosmetics.includes('customCursor') && purchaseItem('custom_cursor')} 
+                      disabled={isLoadingPurchase || userData.cosmetics.includes('customCursor')}
+                    >
+                      <span className="package-emoji"><PixelIcon name="target" size={24} /></span>
+                      <span className="package-pixels">Custom Cursor</span>
+                      <span className="package-desc">Choose your own cursor color</span>
+                      <span className="package-price">{userData.cosmetics.includes('customCursor') ? '✓ Owned' : '15 kr'}</span>
+                    </button>
+                    
+                    {/* Custom cursor color picker */}
+                    {userData.cosmetics.includes('customCursor') && (
+                      <div className="cursor-color-picker">
+                        <span>Choose cursor color:</span>
+                        <input 
+                          type="color" 
+                          value={cursorColorPicker}
+                          onChange={(e) => setCursorColorPicker(e.target.value)}
+                        />
+                        <button onClick={() => setCustomCursorColor(cursorColorPicker)}>Apply</button>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+              
+              {isLoadingPurchase && (
+                <div className="shop-loading">Loading payment...</div>
+              )}
+              <p className="shop-note"><PixelIcon name="secure" size={14} /> Secure payment via Stripe</p>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Canvas Wipe Confirmation */}
+      {showWipeConfirm && (
+        <div className="shop-overlay" onClick={() => setShowWipeConfirm(false)}>
+          <div className="confirm-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="confirm-header">
+              <span><PixelIcon name="broom" size={18} /> Canvas Wipe</span>
+            </div>
+            <div className="confirm-content">
+              <p><PixelIcon name="bomb" size={16} color="#e74c3c" /> This will clear the ENTIRE canvas!</p>
+              <p>All pixels will be removed. This cannot be undone.</p>
+              <p>Are you absolutely sure?</p>
+              <div className="confirm-buttons">
+                <button className="cancel-btn" onClick={() => setShowWipeConfirm(false)}>Cancel</button>
+                <button className="confirm-btn" onClick={performCanvasWipe}><PixelIcon name="broom" size={14} /> WIPE CANVAS</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Auth Modal */}
+      {showAuthModal && (
+        <div className="shop-overlay" onClick={() => { setShowAuthModal(false); setPendingPurchase(null); setRequireAuthForPurchase(false); }}>
+          <div className="auth-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="auth-header">
+              <span>{authMode === 'login' ? '🔑 Log In' : '✨ Create Account'}</span>
+              <button onClick={() => { setShowAuthModal(false); setPendingPurchase(null); setRequireAuthForPurchase(false); }}>×</button>
+            </div>
+            <div className="auth-content">
+              {requireAuthForPurchase && (
+                <div className="auth-notice">
+                  <PixelIcon name="secure" size={16} />
+                  <span>Create an account to save your purchases and access them on any device!</span>
+                </div>
+              )}
+              
+              {authMode === 'register' && (
+                <div className="auth-field">
+                  <label>Display Name (optional)</label>
+                  <input
+                    type="text"
+                    placeholder="Your name on canvas"
+                    value={authDisplayName}
+                    onChange={(e) => setAuthDisplayName(e.target.value)}
+                    maxLength={20}
+                  />
+                </div>
+              )}
+              
+              <div className="auth-field">
+                <label>Email</label>
+                <input
+                  type="email"
+                  placeholder="your@email.com"
+                  value={authEmail}
+                  onChange={(e) => { setAuthEmail(e.target.value); setAuthError(''); }}
+                  onKeyDown={(e) => e.key === 'Enter' && (authMode === 'login' ? handleLogin() : handleRegister())}
+                />
+              </div>
+              
+              <div className="auth-field">
+                <label>Password</label>
+                <input
+                  type="password"
+                  placeholder={authMode === 'register' ? "Min 6 characters" : "Your password"}
+                  value={authPassword}
+                  onChange={(e) => { setAuthPassword(e.target.value); setAuthError(''); }}
+                  onKeyDown={(e) => e.key === 'Enter' && (authMode === 'login' ? handleLogin() : handleRegister())}
+                />
+              </div>
+              
+              {authError && <div className="auth-error">{authError}</div>}
+              
+              <button 
+                className="auth-submit-btn"
+                onClick={authMode === 'login' ? handleLogin : handleRegister}
+                disabled={authLoading}
+              >
+                {authLoading ? 'Loading...' : (authMode === 'login' ? 'Log In' : 'Create Account')}
+              </button>
+              
+              <div className="auth-switch">
+                {authMode === 'login' ? (
+                  <>Don't have an account? <button onClick={() => setAuthMode('register')}>Create one</button></>
+                ) : (
+                  <>Already have an account? <button onClick={() => setAuthMode('login')}>Log in</button></>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}

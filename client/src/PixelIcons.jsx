@@ -2,8 +2,8 @@
 // Each icon is designed on a small grid for that authentic pixel art feel
 
 export const PixelIcon = ({ name, size = 16, color, className = "" }) => {
-  // Use CSS variable for theme-aware default color
-  const iconColor = color || 'var(--icon-color, #333333)';
+  // Use currentColor to inherit from parent's CSS color property
+  const iconColor = color || 'currentColor';
   
   const icons = {
     // Shopping cart - 8x8 grid - redesigned to look more like a cart
@@ -403,6 +403,70 @@ export const PixelIcon = ({ name, size = 16, color, className = "" }) => {
         <rect x="6" y="2" width="1" height="2" fill={iconColor} />
         <rect x="6" y="4" width="1" height="2" fill={iconColor} />
         <rect x="5" y="5" width="1" height="1" fill={iconColor} />
+      </svg>
+    ),
+
+    // Menu/Hamburger - 8x8 grid
+    menu: (
+      <svg width={size} height={size} viewBox="0 0 8 8" className={className} style={{ imageRendering: 'pixelated' }}>
+        <rect x="0" y="1" width="8" height="1" fill={iconColor} />
+        <rect x="0" y="3" width="8" height="1" fill={iconColor} />
+        <rect x="0" y="5" width="8" height="1" fill={iconColor} />
+      </svg>
+    ),
+
+    // Question mark - 8x8 grid
+    question: (
+      <svg width={size} height={size} viewBox="0 0 8 8" className={className} style={{ imageRendering: 'pixelated' }}>
+        <rect x="2" y="0" width="4" height="1" fill={iconColor} />
+        <rect x="1" y="1" width="2" height="1" fill={iconColor} />
+        <rect x="5" y="1" width="2" height="1" fill={iconColor} />
+        <rect x="5" y="2" width="2" height="1" fill={iconColor} />
+        <rect x="4" y="3" width="2" height="1" fill={iconColor} />
+        <rect x="3" y="4" width="2" height="1" fill={iconColor} />
+        <rect x="3" y="6" width="2" height="2" fill={iconColor} />
+      </svg>
+    ),
+
+    // Rules/Document - 8x8 grid
+    rules: (
+      <svg width={size} height={size} viewBox="0 0 8 8" className={className} style={{ imageRendering: 'pixelated' }}>
+        <rect x="1" y="0" width="5" height="1" fill={iconColor} />
+        <rect x="6" y="0" width="1" height="1" fill={iconColor} />
+        <rect x="1" y="1" width="1" height="6" fill={iconColor} />
+        <rect x="6" y="1" width="1" height="6" fill={iconColor} />
+        <rect x="1" y="7" width="6" height="1" fill={iconColor} />
+        <rect x="2" y="2" width="4" height="1" fill={iconColor} />
+        <rect x="2" y="4" width="3" height="1" fill={iconColor} />
+        <rect x="2" y="5" width="4" height="1" fill={iconColor} />
+      </svg>
+    ),
+
+    // Chart/Stats - 8x8 grid
+    chart: (
+      <svg width={size} height={size} viewBox="0 0 8 8" className={className} style={{ imageRendering: 'pixelated' }}>
+        <rect x="0" y="7" width="8" height="1" fill={iconColor} />
+        <rect x="0" y="0" width="1" height="7" fill={iconColor} />
+        <rect x="2" y="5" width="1" height="2" fill={iconColor} />
+        <rect x="4" y="3" width="1" height="4" fill={iconColor} />
+        <rect x="6" y="1" width="1" height="6" fill={iconColor} />
+      </svg>
+    ),
+
+    // Info/i - 8x8 grid
+    info: (
+      <svg width={size} height={size} viewBox="0 0 8 8" className={className} style={{ imageRendering: 'pixelated' }}>
+        <rect x="2" y="0" width="4" height="1" fill={iconColor} />
+        <rect x="1" y="1" width="1" height="1" fill={iconColor} />
+        <rect x="6" y="1" width="1" height="1" fill={iconColor} />
+        <rect x="0" y="2" width="1" height="4" fill={iconColor} />
+        <rect x="7" y="2" width="1" height="4" fill={iconColor} />
+        <rect x="1" y="6" width="1" height="1" fill={iconColor} />
+        <rect x="6" y="6" width="1" height="1" fill={iconColor} />
+        <rect x="2" y="7" width="4" height="1" fill={iconColor} />
+        {/* i symbol */}
+        <rect x="3" y="2" width="2" height="1" fill={iconColor} />
+        <rect x="3" y="4" width="2" height="2" fill={iconColor} />
       </svg>
     ),
   };

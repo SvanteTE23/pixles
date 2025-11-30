@@ -163,7 +163,6 @@ const PRODUCTS = {
   // Cosmetics
   glow_effect: { type: 'cosmetic', cosmetic: 'glow', price: 2000, name: '✨ Glow Effect', desc: 'Your pixels glow and stand out' },
   vip_badge: { type: 'cosmetic', cosmetic: 'vip', price: 5000, name: '👑 VIP Badge', desc: 'Show off your VIP status' },
-  animated_name: { type: 'cosmetic', cosmetic: 'animatedName', price: 2500, name: '🎭 Animated Name', desc: 'Your name animates in rainbow colors' },
   custom_cursor: { type: 'cosmetic', cosmetic: 'customCursor', price: 1500, name: '🎯 Custom Cursor', desc: 'Choose your own cursor color' },
 };
 
@@ -476,6 +475,44 @@ app.post('/api/set-cursor-color', (req, res) => {
   }
 });
 
+// Admin password - stored on server only
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'cb!!!!(/&)/(hflöq0=uw3HkjhSJKD';
+
+// Admin: Verify password
+app.post('/api/admin/verify', (req, res) => {
+  const { password } = req.body;
+  if (password === ADMIN_PASSWORD) {
+    res.json({ success: true });
+  } else {
+    res.status(401).json({ success: false, error: 'Invalid password' });
+  }
+});
+
+// Admin: Toggle cosmetic (for testing)
+app.post('/api/admin/toggle-cosmetic', (req, res) => {
+  const { visitorId, cosmetic, adminPassword } = req.body;
+  
+  // Verify admin password
+  if (adminPassword !== ADMIN_PASSWORD) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  
+  const user = getOrCreateUser(visitorId);
+  const cosmeticIndex = user.cosmetics.indexOf(cosmetic);
+  
+  if (cosmeticIndex === -1) {
+    // Add cosmetic
+    user.cosmetics.push(cosmetic);
+    saveUsers();
+    res.json({ success: true, action: 'added', cosmetics: user.cosmetics });
+  } else {
+    // Remove cosmetic
+    user.cosmetics.splice(cosmeticIndex, 1);
+    saveUsers();
+    res.json({ success: true, action: 'removed', cosmetics: user.cosmetics });
+  }
+});
+
 // ============ SOCKET.IO ============
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
@@ -511,7 +548,8 @@ io.on('connection', (socket) => {
       if (cursorColor) user.cursorColor = cursorColor;
       socket.broadcast.emit('cursor_update', { 
         id: socket.id, x, y, 
-        color: user.cursorColor || user.color, 
+        color: user.color, 
+        cursorColor: user.cursorColor,
         name: user.name,
         cosmetics: user.cosmetics
       });

@@ -28,12 +28,13 @@ cd pixles
 npm run install:all
 ```
 
-### 3. Set up Stripe (required for payments)
-Create the file `server/.env` with your Stripe secret key:
+### 3. Set up environment variables
+Create the file `server/.env` with:
 ```
 STRIPE_SECRET_KEY=sk_test_your_stripe_key_here
+ADMIN_PASSWORD=your_admin_password_here
 ```
-> 📧 Ask Elias for the test API key!
+> 📧 Ask Elias for the test API key and admin password!
 
 ### 4. Start the app
 ```bash

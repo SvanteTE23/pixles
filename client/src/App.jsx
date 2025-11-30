@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import io from 'socket.io-client';
 import './App.css';
 import { PixelIcon } from './PixelIcons';
@@ -7,7 +7,11 @@ const CANVAS_SIZE = 1000; // Must match server
 const PIXEL_SIZE = 4; // Size of each pixel in visual px
 const SERVER_URL = `http://${window.location.hostname}:3001`;
 const MAX_PIXELS = 10;
-const REFILL_TIME = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+const REFILL_TIME = 4 * 60 * 60 * 1000; // 4 hours in milliseconds
+
+// Detect mobile device
+const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
+  ('ontouchstart' in window && window.innerWidth <= 768);
 
 // Generate or retrieve visitor ID
 const getVisitorId = () => {
@@ -66,6 +70,7 @@ function App() {
   const [isAdminOpen, setIsAdminOpen] = useState(false);
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
   const [adminPassword, setAdminPassword] = useState('');
+  const [verifiedAdminPassword, setVerifiedAdminPassword] = useState('');
   const [adminPasswordError, setAdminPasswordError] = useState(false);
   const [adminPixelInput, setAdminPixelInput] = useState('');
   const [darkMode, setDarkMode] = useState(() => {
@@ -119,7 +124,7 @@ function App() {
   
   // Tools & Power-ups state
   const [activeTool, setActiveTool] = useState(TOOLS.PIXEL);
-  const [showTools, setShowTools] = useState(true);
+  const [showTools, setShowTools] = useState(false);
   const [useProtectedPixel, setUseProtectedPixel] = useState(false);
   const [drawStart, setDrawStart] = useState(null); // For line/rect/circle tools
   const [previewPixels, setPreviewPixels] = useState([]); // Preview for tools
@@ -128,6 +133,10 @@ function App() {
   
   // Cosmetics state
   const [cursorColorPicker, setCursorColorPicker] = useState('#FF0000');
+  
+  // Info menu state
+  const [showInfoMenu, setShowInfoMenu] = useState(false);
+  const [infoPage, setInfoPage] = useState(null); // 'howto', 'rules', 'about', 'stats'
   
   const visitorId = useRef(getEffectiveVisitorId());
   const [pixelsRemaining, setPixelsRemaining] = useState(() => {
@@ -153,12 +162,19 @@ function App() {
   const lastMousePos = useRef({ x: 0, y: 0 });
   const isDrawing = useRef(false);
   
+  // Cursor throttle ref (for performance)
+  const lastCursorEmit = useRef(0);
+  const CURSOR_THROTTLE = isMobile ? 100 : 50; // ms between cursor updates
+  
   // Touch handling refs
   const touchState = useRef({
     lastDist: 0,
     lastCenter: null,
     isPinching: false,
     isDragging: false,
+    wasPinching: false,
+    hasMoved: false,
+    startTouchPos: null,
     lastTouchPos: null
   });
 
@@ -257,23 +273,22 @@ function App() {
     }
   }, []);
 
-  // Animation Loop
+  // Animation Loop - optimized to only run when needed
   useEffect(() => {
     let animationFrameId;
+    let isAnimating = false;
     
     const animate = () => {
       const target = targetTransform.current;
       const current = currentTransform.current;
       
-      // Smooth Zoom (Lerp)
-      // We only lerp if there's a significant difference
       const zoomDiff = target.zoom - current.zoom;
       const xDiff = target.x - current.x;
       const yDiff = target.y - current.y;
 
-      if (Math.abs(zoomDiff) > 0.0001 || Math.abs(xDiff) > 0.1 || Math.abs(yDiff) > 0.1) {
-        // Lerp factor for zoom - adjust for smoothness
-        const t = 0.2; 
+      // Only continue animating if there's significant difference
+      if (Math.abs(zoomDiff) > 0.0001 || Math.abs(xDiff) > 0.5 || Math.abs(yDiff) > 0.5) {
+        const t = 0.25; // Slightly faster lerp
         
         current.zoom += zoomDiff * t;
         current.x += xDiff * t;
@@ -281,13 +296,34 @@ function App() {
 
         setZoom(current.zoom);
         setOffset({ x: current.x, y: current.y });
+        
+        animationFrameId = requestAnimationFrame(animate);
+      } else {
+        // Snap to target and stop animating
+        current.zoom = target.zoom;
+        current.x = target.x;
+        current.y = target.y;
+        setZoom(current.zoom);
+        setOffset({ x: current.x, y: current.y });
+        isAnimating = false;
       }
-
-      animationFrameId = requestAnimationFrame(animate);
     };
     
-    animate();
-    return () => cancelAnimationFrame(animationFrameId);
+    // Start animation function - call this when transform changes
+    const startAnimation = () => {
+      if (!isAnimating) {
+        isAnimating = true;
+        animate();
+      }
+    };
+    
+    // Store start function in ref for external access
+    window.startCanvasAnimation = startAnimation;
+    
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+      delete window.startCanvasAnimation;
+    };
   }, []);
 
   useEffect(() => {
@@ -383,8 +419,8 @@ function App() {
       setOtherCursors(prev => ({ ...prev, [id]: { x: 0, y: 0, color, name } }));
     });
 
-    socket.on('cursor_update', ({ id, x, y, color, name }) => {
-      setOtherCursors(prev => ({ ...prev, [id]: { x, y, color, name } }));
+    socket.on('cursor_update', ({ id, x, y, color, name, cosmetics, cursorColor }) => {
+      setOtherCursors(prev => ({ ...prev, [id]: { x, y, color, name, cosmetics, cursorColor } }));
     });
 
     socket.on('user_left', (id) => {
@@ -775,7 +811,8 @@ function App() {
       touchState.current.isPinching = false;
     } else if (e.touches.length === 2) {
       touchState.current.isPinching = true;
-      touchState.current.isDragging = false; // Disable drag when pinching starts
+      touchState.current.isDragging = false;
+      touchState.current.hasMoved = true; // Mark as moved to prevent pixel placement after pinch
       touchState.current.lastDist = getTouchDistance(e.touches);
       touchState.current.lastCenter = getTouchCenter(e.touches);
     }
@@ -809,6 +846,9 @@ function App() {
 
       targetTransform.current = { zoom: newZoom, x: newOffsetX, y: newOffsetY };
       
+      // Trigger animation for pinch zoom
+      if (window.startCanvasAnimation) window.startCanvasAnimation();
+      
       touchState.current.lastDist = dist;
       touchState.current.lastCenter = center;
 
@@ -833,7 +873,8 @@ function App() {
   };
 
   const handleTouchEnd = (e) => {
-    if (!touchState.current.hasMoved && !touchState.current.isPinching && e.changedTouches.length === 1 && touchState.current.isDragging && e.touches.length === 0) {
+    // Only place pixel if: not moved, was NOT pinching, single touch ended, and no touches remain
+    if (!touchState.current.hasMoved && !touchState.current.isPinching && !touchState.current.wasPinching && e.changedTouches.length === 1 && e.touches.length === 0) {
       // It's a tap!
       const touch = e.changedTouches[0];
       placePixel(touch.clientX, touch.clientY);
@@ -842,11 +883,14 @@ function App() {
     if (e.touches.length === 0) {
       touchState.current.isDragging = false;
       touchState.current.isPinching = false;
+      touchState.current.wasPinching = false;
     } else if (e.touches.length === 1) {
-      // Transition from pinch to drag
+      // Transition from pinch to drag - mark that we were pinching
       if (touchState.current.isPinching) {
         touchState.current.isPinching = false;
+        touchState.current.wasPinching = true; // Remember we were pinching
         touchState.current.isDragging = true;
+        touchState.current.hasMoved = true; // Ensure no pixel placement
         touchState.current.lastTouchPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
       }
     }
@@ -872,6 +916,9 @@ function App() {
     const newOffsetY = mouseY - (mouseY - currentTarget.y) * (newZoom / currentTarget.zoom);
 
     targetTransform.current = { zoom: newZoom, x: newOffsetX, y: newOffsetY };
+    
+    // Trigger animation
+    if (window.startCanvasAnimation) window.startCanvasAnimation();
   };
 
   const handleMouseDown = (e) => {
@@ -934,8 +981,10 @@ function App() {
           setPreviewPixels([]);
         }
         
-        // Emit cursor position
-        if (socketRef.current) {
+        // Emit cursor position (throttled)
+        const now = Date.now();
+        if (socketRef.current && now - lastCursorEmit.current > CURSOR_THROTTLE) {
+          lastCursorEmit.current = now;
           socketRef.current.emit('cursor_move', { 
             x, y, 
             name: displayName,
@@ -975,6 +1024,26 @@ function App() {
         localStorage.removeItem('refillTime');
         setTimeUntilRefill(0);
       }
+    }
+  };
+
+  const toggleCosmetic = async (cosmetic) => {
+    try {
+      const response = await fetch(`${SERVER_URL}/api/admin/toggle-cosmetic`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          visitorId: visitorId.current, 
+          cosmetic,
+          adminPassword: verifiedAdminPassword
+        }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setUserData(prev => ({ ...prev, cosmetics: data.cosmetics }));
+      }
+    } catch (error) {
+      console.error('Toggle cosmetic error:', error);
     }
   };
 
@@ -1155,6 +1224,151 @@ function App() {
 
   return (
     <div className="app-container">
+      {/* Info Menu Button */}
+      <button 
+        className="info-menu-btn"
+        onClick={() => setShowInfoMenu(!showInfoMenu)}
+        title="Menu"
+      >
+        ☰
+      </button>
+      
+      {/* Info Menu Dropdown */}
+      {showInfoMenu && (
+        <div className="info-menu">
+          <button onClick={() => { setInfoPage('howto'); setShowInfoMenu(false); }}>
+            <PixelIcon name="question" size={16} color={iconColor} /> How to Play
+          </button>
+          <button onClick={() => { setInfoPage('rules'); setShowInfoMenu(false); }}>
+            <PixelIcon name="rules" size={16} color={iconColor} /> Rules
+          </button>
+          <button onClick={() => { setInfoPage('stats'); setShowInfoMenu(false); }}>
+            <PixelIcon name="chart" size={16} color={iconColor} /> Statistics
+          </button>
+          <button onClick={() => { setInfoPage('about'); setShowInfoMenu(false); }}>
+            <PixelIcon name="info" size={16} color={iconColor} /> About Pixles
+          </button>
+        </div>
+      )}
+      
+      {/* Info Page Modal */}
+      {infoPage && (
+        <div className="shop-overlay" onClick={() => setInfoPage(null)}>
+          <div className="info-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="info-header">
+              <span>
+                {infoPage === 'howto' && <><PixelIcon name="question" size={18} /> How to Play</>}
+                {infoPage === 'rules' && <><PixelIcon name="rules" size={18} /> Rules</>}
+                {infoPage === 'stats' && <><PixelIcon name="chart" size={18} /> Statistics</>}
+                {infoPage === 'about' && <><PixelIcon name="info" size={18} /> About Pixles</>}
+              </span>
+              <button onClick={() => setInfoPage(null)}>✕</button>
+            </div>
+            <div className="info-content">
+              {infoPage === 'howto' && (
+                <>
+                  <h3>🎨 Getting Started</h3>
+                  <ul>
+                    <li><strong>Click</strong> on the canvas to place a pixel</li>
+                    <li><strong>Right-click + drag</strong> to pan around</li>
+                    <li><strong>Scroll</strong> to zoom in/out</li>
+                    <li><strong>Touch:</strong> Tap to place, pinch to zoom, drag to pan</li>
+                  </ul>
+                  
+                  <h3>🎯 Pixels</h3>
+                  <ul>
+                    <li>You get <strong>10 free pixels</strong> that refill every 4 hours</li>
+                    <li>Buy more pixels in the shop if you run out</li>
+                  </ul>
+                  
+                  <h3>🛠️ Tools</h3>
+                  <ul>
+                    <li><strong>Pixel:</strong> Place one pixel at a time (free)</li>
+                    <li><strong>Brush:</strong> Paint 3×3 area (purchasable)</li>
+                    <li><strong>Line/Rectangle/Circle:</strong> Draw shapes (purchasable)</li>
+                    <li><strong>Bombs:</strong> Fill 5×5 or 10×10 areas instantly</li>
+                  </ul>
+                  
+                  <h3>💄 Cosmetics</h3>
+                  <ul>
+                    <li><strong>Glow:</strong> Make your pixels stand out</li>
+                    <li><strong>VIP Badge:</strong> Show your status</li>
+                    <li><strong>Custom Cursor:</strong> Personalize your look</li>
+                  </ul>
+                </>
+              )}
+              
+              {infoPage === 'rules' && (
+                <>
+                  <h3>✅ Allowed</h3>
+                  <ul>
+                    <li>Create pixel art</li>
+                    <li>Collaborate with others</li>
+                    <li>Defend your creations</li>
+                    <li>Have fun!</li>
+                  </ul>
+                  
+                  <h3>❌ Not Allowed</h3>
+                  <ul>
+                    <li>Hate symbols or offensive content</li>
+                    <li>NSFW/inappropriate imagery</li>
+                    <li>Using bots or automation</li>
+                    <li>Spamming or griefing excessively</li>
+                  </ul>
+                  
+                  <h3>⚠️ Consequences</h3>
+                  <p>Breaking the rules may result in your pixels being removed or account being banned.</p>
+                </>
+              )}
+              
+              {infoPage === 'stats' && (
+                <>
+                  <h3>📊 Your Stats</h3>
+                  <ul>
+                    <li><strong>Pixels available:</strong> {pixelsRemaining + userData.pixels}</li>
+                    <li><strong>Free pixels:</strong> {pixelsRemaining}/10</li>
+                    <li><strong>Purchased pixels:</strong> {userData.pixels}</li>
+                    <li><strong>Bombs (5×5):</strong> {userData.bombs[5]}</li>
+                    <li><strong>Bombs (10×10):</strong> {userData.bombs[10]}</li>
+                    <li><strong>Canvas wipes:</strong> {userData.canvasWipes}</li>
+                    <li><strong>Tools owned:</strong> {userData.tools.length}</li>
+                    <li><strong>Cosmetics owned:</strong> {userData.cosmetics.length}</li>
+                  </ul>
+                  
+                  <h3>🌐 Canvas Info</h3>
+                  <ul>
+                    <li><strong>Canvas size:</strong> {CANVAS_SIZE} × {CANVAS_SIZE} pixels</li>
+                    <li><strong>Total pixels:</strong> {(CANVAS_SIZE * CANVAS_SIZE).toLocaleString()}</li>
+                    <li><strong>Active users:</strong> {Object.keys(otherCursors).length + 1}</li>
+                  </ul>
+                </>
+              )}
+              
+              {infoPage === 'about' && (
+                <>
+                  <h3>🎮 What is Pixles?</h3>
+                  <p>Pixles is a collaborative pixel art canvas inspired by Reddit's r/place. Work together (or against each other!) to create art on a shared canvas.</p>
+                  
+                  <h3>👥 Made By</h3>
+                  <p>Created by Elias and friends as a fun project.</p>
+                  
+                  <h3>💻 Tech Stack</h3>
+                  <ul>
+                    <li>React + Vite (Frontend)</li>
+                    <li>Node.js + Express (Backend)</li>
+                    <li>Socket.io (Real-time)</li>
+                    <li>Stripe (Payments)</li>
+                  </ul>
+                  
+                  <h3>📝 Version</h3>
+                  <p>v1.0.0</p>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="pixels-counter">
         <div className="pixels-counter-inner">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -1287,7 +1501,10 @@ function App() {
                 left: hoveredPixel.x * PIXEL_SIZE,
                 top: hoveredPixel.y * PIXEL_SIZE,
                 width: PIXEL_SIZE,
-                height: PIXEL_SIZE
+                height: PIXEL_SIZE,
+                border: '1px solid rgba(0, 0, 0, 0.5)',
+                backgroundColor: 'rgba(255, 255, 255, 0.3)',
+                boxShadow: '0 0 2px rgba(0,0,0,0.3)'
               }}
             />
           )}
@@ -1306,45 +1523,50 @@ function App() {
               }}
             />
           ))}
-          {/* Other users' cursors */}
-          {Object.entries(otherCursors).map(([id, cursor]) => (
-            <div
-              key={id}
-              className="other-cursor"
-              style={{
-                left: cursor.x * PIXEL_SIZE + PIXEL_SIZE / 2,
-                top: cursor.y * PIXEL_SIZE + PIXEL_SIZE / 2,
-              }}
-            >
-              <svg 
-                width={PIXEL_SIZE} 
-                height={PIXEL_SIZE} 
-                viewBox="0 0 5 5" 
-                style={{ 
-                  transform: 'translate(-50%, -50%)',
-                  shapeRendering: 'crispEdges'
+          {/* Other users' cursors - limited on mobile for performance */}
+          {Object.entries(otherCursors).slice(0, isMobile ? 10 : 50).map(([id, cursor]) => {
+            const hasRainbow = cursor.cosmetics?.includes('customCursor');
+            const cursorFill = cursor.cursorColor || cursor.color;
+            
+            return (
+              <div
+                key={id}
+                className={`other-cursor ${hasRainbow ? 'rainbow-cursor' : ''}`}
+                style={{
+                  left: cursor.x * PIXEL_SIZE,
+                  top: cursor.y * PIXEL_SIZE,
                 }}
               >
-                <rect x="2" y="0" width="1" height="2" fill={cursor.cursorColor || cursor.color}/>
-                <rect x="0" y="2" width="2" height="1" fill={cursor.cursorColor || cursor.color}/>
-                <rect x="2" y="2" width="1" height="1" fill={cursor.cursorColor || cursor.color}/>
-                <rect x="3" y="2" width="2" height="1" fill={cursor.cursorColor || cursor.color}/>
-                <rect x="2" y="3" width="1" height="2" fill={cursor.cursorColor || cursor.color}/>
-              </svg>
-              {cursor.name && (
-                <div 
-                  className={`cursor-name ${cursor.cosmetics?.includes('animatedName') ? 'animated-name' : ''}`}
+                <svg 
+                  width={PIXEL_SIZE} 
+                  height={PIXEL_SIZE} 
+                  viewBox="0 0 5 5" 
                   style={{ 
-                    color: cursor.cursorColor || cursor.color,
-                    transform: `translate(-50%, ${PIXEL_SIZE / 2 + 2}px) scale(${1/zoom})`
+                    shapeRendering: 'crispEdges'
                   }}
                 >
-                  {cursor.cosmetics?.includes('vip') && <span className="vip-badge"><PixelIcon name="crown" size={10} color="#FFD700" /></span>}
-                  {cursor.name}
-                </div>
-              )}
-            </div>
-          ))}
+                  <rect x="2" y="0" width="1" height="2" fill={cursorFill}/>
+                  <rect x="0" y="2" width="2" height="1" fill={cursorFill}/>
+                  <rect x="2" y="2" width="1" height="1" fill={cursorFill}/>
+                  <rect x="3" y="2" width="2" height="1" fill={cursorFill}/>
+                  <rect x="2" y="3" width="1" height="2" fill={cursorFill}/>
+                </svg>
+                {/* Hide cursor names on mobile for performance */}
+                {!isMobile && cursor.name && (
+                  <div 
+                    className={`cursor-name ${hasRainbow ? 'rainbow-text' : ''}`}
+                    style={{ 
+                      color: hasRainbow ? undefined : (cursor.cursorColor || cursor.color),
+                      transform: `translateX(-50%) scale(${1/zoom})`
+                    }}
+                  >
+                    {cursor.cosmetics?.includes('vip') && <span className="vip-badge"><PixelIcon name="crown" size={10} color="#FFD700" /></span>}
+                    {cursor.name}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -1518,7 +1740,7 @@ function App() {
         <div className="admin-panel settings-panel">
           <div className="admin-header">
             <span>Settings</span>
-            <button onClick={() => { setIsAdminOpen(false); setIsAdminAuthenticated(false); setAdminPassword(''); setAdminPasswordError(false); }}>×</button>
+            <button onClick={() => { setIsAdminOpen(false); setIsAdminAuthenticated(false); setAdminPassword(''); setVerifiedAdminPassword(''); setAdminPasswordError(false); }}>×</button>
           </div>
           
           {/* Account Section */}
@@ -1604,13 +1826,24 @@ function App() {
                   placeholder="Password"
                   value={adminPassword}
                   onChange={(e) => { setAdminPassword(e.target.value); setAdminPasswordError(false); }}
-                  onKeyDown={(e) => {
+                  onKeyDown={async (e) => {
                     if (e.key === 'Enter') {
-                      if (adminPassword === 'cb!!!!(/&)/(hflöq0=uw3HkjhSJKD') {
-                        setIsAdminAuthenticated(true);
-                        setAdminPassword('');
-                        setAdminPasswordError(false);
-                      } else {
+                      try {
+                        const response = await fetch(`${SERVER_URL}/api/admin/verify`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ password: adminPassword }),
+                        });
+                        const data = await response.json();
+                        if (data.success) {
+                          setVerifiedAdminPassword(adminPassword);
+                          setIsAdminAuthenticated(true);
+                          setAdminPassword('');
+                          setAdminPasswordError(false);
+                        } else {
+                          setAdminPasswordError(true);
+                        }
+                      } catch (error) {
                         setAdminPasswordError(true);
                       }
                     }
@@ -1619,12 +1852,23 @@ function App() {
                 />
                 <button 
                   className="admin-btn" 
-                  onClick={() => {
-                    if (adminPassword === 'cb!!!!(/&)/(hflöq0=uw3HkjhSJKD') {
-                      setIsAdminAuthenticated(true);
-                      setAdminPassword('');
-                      setAdminPasswordError(false);
-                    } else {
+                  onClick={async () => {
+                    try {
+                      const response = await fetch(`${SERVER_URL}/api/admin/verify`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ password: adminPassword }),
+                      });
+                      const data = await response.json();
+                      if (data.success) {
+                        setVerifiedAdminPassword(adminPassword);
+                        setIsAdminAuthenticated(true);
+                        setAdminPassword('');
+                        setAdminPasswordError(false);
+                      } else {
+                        setAdminPasswordError(true);
+                      }
+                    } catch (error) {
                       setAdminPasswordError(true);
                     }
                   }}
@@ -1652,6 +1896,30 @@ function App() {
                 </div>
                 <div className="admin-info">
                   Current: {pixelsRemaining} pixels
+                </div>
+                
+                <div className="admin-cosmetics">
+                  <div className="admin-cosmetics-title">Toggle Cosmetics (Testing)</div>
+                  <div className="admin-cosmetic-toggles">
+                    <button 
+                      className={`admin-cosmetic-btn ${userData.cosmetics.includes('vip') ? 'active' : ''}`}
+                      onClick={() => toggleCosmetic('vip')}
+                    >
+                      👑 VIP {userData.cosmetics.includes('vip') ? '✓' : ''}
+                    </button>
+                    <button 
+                      className={`admin-cosmetic-btn ${userData.cosmetics.includes('customCursor') ? 'active' : ''}`}
+                      onClick={() => toggleCosmetic('customCursor')}
+                    >
+                      🌈 Rainbow Cursor {userData.cosmetics.includes('customCursor') ? '✓' : ''}
+                    </button>
+                    <button 
+                      className={`admin-cosmetic-btn ${userData.cosmetics.includes('glow') ? 'active' : ''}`}
+                      onClick={() => toggleCosmetic('glow')}
+                    >
+                      ✨ Glow Effect {userData.cosmetics.includes('glow') ? '✓' : ''}
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -1833,16 +2101,6 @@ function App() {
                       <span className="package-pixels">VIP Badge</span>
                       <span className="package-desc">Show off your VIP status</span>
                       <span className="package-price">{userData.cosmetics.includes('vip') ? '✓ Owned' : '50 kr'}</span>
-                    </button>
-                    <button 
-                      className={`package-btn cosmetic ${userData.cosmetics.includes('animatedName') ? 'owned' : ''}`} 
-                      onClick={() => !userData.cosmetics.includes('animatedName') && purchaseItem('animated_name')} 
-                      disabled={isLoadingPurchase || userData.cosmetics.includes('animatedName')}
-                    >
-                      <span className="package-emoji"><PixelIcon name="mask" size={24} /></span>
-                      <span className="package-pixels">Animated Name</span>
-                      <span className="package-desc">Your name animates in rainbow</span>
-                      <span className="package-price">{userData.cosmetics.includes('animatedName') ? '✓ Owned' : '25 kr'}</span>
                     </button>
                     <button 
                       className={`package-btn cosmetic ${userData.cosmetics.includes('customCursor') ? 'owned' : ''}`} 

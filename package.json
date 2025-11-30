@@ -5,7 +5,10 @@
     "start": "concurrently \"npm run start:server\" \"npm run start:client\"",
     "start:server": "cd server && node index.js",
     "start:client": "cd client && npm run dev",
-    "install:all": "cd client && npm install && cd ../server && npm install"
+    "install:all": "cd client && npm install && cd ../server && npm install",
+    "build": "cd client && npm run build",
+    "preview": "cd client && npm run preview",
+    "start:prod": "concurrently \"npm run start:server\" \"npm run preview\""
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

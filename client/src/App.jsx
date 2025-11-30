@@ -96,12 +96,15 @@ function App() {
     return localStorage.getItem('userEmail') || '';
   });
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [authMode, setAuthMode] = useState('login'); // 'login' or 'register'
+  const [authMode, setAuthMode] = useState('login'); // 'login', 'register', or 'reset'
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [authDisplayName, setAuthDisplayName] = useState('');
+  const [authCurrentPassword, setAuthCurrentPassword] = useState('');
   const [authError, setAuthError] = useState('');
+  const [authSuccess, setAuthSuccess] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [requireAuthForPurchase, setRequireAuthForPurchase] = useState(false);
   const [pendingPurchase, setPendingPurchase] = useState(null);
   
@@ -1199,6 +1202,41 @@ function App() {
     
     setAuthLoading(false);
   };
+
+  const handleResetPassword = async () => {
+    setAuthError('');
+    setAuthSuccess('');
+    setAuthLoading(true);
+    
+    try {
+      const response = await fetch(`${SERVER_URL}/api/change-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          email: authEmail, 
+          currentPassword: authCurrentPassword,
+          newPassword: authPassword
+        }),
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        setAuthSuccess('Password changed! You can now log in.');
+        setAuthPassword('');
+        setAuthCurrentPassword('');
+        setTimeout(() => {
+          setAuthMode('login');
+          setAuthSuccess('');
+        }, 2000);
+      } else {
+        setAuthError(data.error || 'Password change failed');
+      }
+    } catch (error) {
+      setAuthError('Connection error. Try again.');
+    }
+    
+    setAuthLoading(false);
+  };
   
   const handleLogout = () => {
     localStorage.removeItem('loggedInVisitorId');
@@ -2160,14 +2198,14 @@ function App() {
       
       {/* Auth Modal */}
       {showAuthModal && (
-        <div className="shop-overlay" onClick={() => { setShowAuthModal(false); setPendingPurchase(null); setRequireAuthForPurchase(false); }}>
+        <div className="shop-overlay" onClick={() => { setShowAuthModal(false); setPendingPurchase(null); setRequireAuthForPurchase(false); setAuthError(''); setAuthSuccess(''); setShowPassword(false); }}>
           <div className="auth-modal" onClick={(e) => e.stopPropagation()}>
             <div className="auth-header">
-              <span>{authMode === 'login' ? '🔑 Log In' : '✨ Create Account'}</span>
-              <button onClick={() => { setShowAuthModal(false); setPendingPurchase(null); setRequireAuthForPurchase(false); }}>×</button>
+              <span>{authMode === 'login' ? '🔑 Log In' : authMode === 'register' ? '✨ Create Account' : '🔐 Change Password'}</span>
+              <button className="close-btn" onClick={() => { setShowAuthModal(false); setPendingPurchase(null); setRequireAuthForPurchase(false); setAuthError(''); setAuthSuccess(''); setShowPassword(false); setAuthCurrentPassword(''); }}>×</button>
             </div>
             <div className="auth-content">
-              {requireAuthForPurchase && (
+              {requireAuthForPurchase && authMode !== 'reset' && (
                 <div className="auth-notice">
                   <PixelIcon name="secure" size={16} />
                   <span>Create an account to save your purchases and access them on any device!</span>
@@ -2193,37 +2231,68 @@ function App() {
                   type="email"
                   placeholder="your@email.com"
                   value={authEmail}
-                  onChange={(e) => { setAuthEmail(e.target.value); setAuthError(''); }}
-                  onKeyDown={(e) => e.key === 'Enter' && (authMode === 'login' ? handleLogin() : handleRegister())}
+                  onChange={(e) => { setAuthEmail(e.target.value); setAuthError(''); setAuthSuccess(''); }}
+                  onKeyDown={(e) => e.key === 'Enter' && (authMode === 'login' ? handleLogin() : authMode === 'register' ? handleRegister() : handleResetPassword())}
                 />
               </div>
               
+              {authMode === 'reset' && (
+                <div className="auth-field">
+                  <label>Current Password</label>
+                  <div className="password-input-wrapper">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      placeholder="Your current password"
+                      value={authCurrentPassword}
+                      onChange={(e) => { setAuthCurrentPassword(e.target.value); setAuthError(''); setAuthSuccess(''); }}
+                      onKeyDown={(e) => e.key === 'Enter' && handleResetPassword()}
+                    />
+                  </div>
+                </div>
+              )}
+              
               <div className="auth-field">
-                <label>Password</label>
-                <input
-                  type="password"
-                  placeholder={authMode === 'register' ? "Min 6 characters" : "Your password"}
-                  value={authPassword}
-                  onChange={(e) => { setAuthPassword(e.target.value); setAuthError(''); }}
-                  onKeyDown={(e) => e.key === 'Enter' && (authMode === 'login' ? handleLogin() : handleRegister())}
-                />
+                <label>{authMode === 'reset' ? 'New Password' : 'Password'}</label>
+                <div className="password-input-wrapper">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder={authMode === 'register' ? "Min 6 characters" : authMode === 'reset' ? "Enter new password" : "Your password"}
+                    value={authPassword}
+                    onChange={(e) => { setAuthPassword(e.target.value); setAuthError(''); setAuthSuccess(''); }}
+                    onKeyDown={(e) => e.key === 'Enter' && (authMode === 'login' ? handleLogin() : authMode === 'register' ? handleRegister() : handleResetPassword())}
+                  />
+                  <button 
+                    type="button" 
+                    className="toggle-password-btn"
+                    onClick={() => setShowPassword(!showPassword)}
+                    tabIndex={-1}
+                  >
+                    {showPassword ? '👁️' : '👁️‍🗨️'}
+                  </button>
+                </div>
               </div>
               
               {authError && <div className="auth-error">{authError}</div>}
+              {authSuccess && <div className="auth-success">{authSuccess}</div>}
               
               <button 
                 className="auth-submit-btn"
-                onClick={authMode === 'login' ? handleLogin : handleRegister}
+                onClick={authMode === 'login' ? handleLogin : authMode === 'register' ? handleRegister : handleResetPassword}
                 disabled={authLoading}
               >
-                {authLoading ? 'Loading...' : (authMode === 'login' ? 'Log In' : 'Create Account')}
+                {authLoading ? 'Loading...' : (authMode === 'login' ? 'Log In' : authMode === 'register' ? 'Create Account' : 'Change Password')}
               </button>
               
               <div className="auth-switch">
                 {authMode === 'login' ? (
-                  <>Don't have an account? <button onClick={() => setAuthMode('register')}>Create one</button></>
+                  <>
+                    <span>Don't have an account? <button onClick={() => { setAuthMode('register'); setAuthError(''); setAuthSuccess(''); }}>Create one</button></span>
+                    <span>Need to change password? <button onClick={() => { setAuthMode('reset'); setAuthError(''); setAuthSuccess(''); setAuthCurrentPassword(''); }}>Change it</button></span>
+                  </>
+                ) : authMode === 'register' ? (
+                  <span>Already have an account? <button onClick={() => { setAuthMode('login'); setAuthError(''); setAuthSuccess(''); }}>Log in</button></span>
                 ) : (
-                  <>Already have an account? <button onClick={() => setAuthMode('login')}>Log in</button></>
+                  <span>Back to login? <button onClick={() => { setAuthMode('login'); setAuthError(''); setAuthSuccess(''); setAuthCurrentPassword(''); }}>Log in</button></span>
                 )}
               </div>
             </div>

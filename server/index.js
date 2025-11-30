@@ -301,6 +301,51 @@ app.post('/api/login', (req, res) => {
   }
 });
 
+// Change password (requires current password for security)
+app.post('/api/change-password', (req, res) => {
+  try {
+    const { email, currentPassword, newPassword } = req.body;
+    
+    if (!email || !currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Email, current password, and new password required' });
+    }
+    
+    const account = accounts.get(email.toLowerCase());
+    
+    if (!account) {
+      return res.status(404).json({ error: 'No account found with this email' });
+    }
+    
+    // Verify current password
+    if (account.passwordHash !== hashPassword(currentPassword)) {
+      return res.status(401).json({ error: 'Current password is incorrect' });
+    }
+    
+    // Check new password length
+    if (newPassword.length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters' });
+    }
+    
+    // Check that new password is different
+    if (currentPassword === newPassword) {
+      return res.status(400).json({ error: 'New password must be different from current password' });
+    }
+    
+    // Update password
+    account.passwordHash = hashPassword(newPassword);
+    account.passwordUpdatedAt = new Date().toISOString();
+    
+    saveAccounts();
+    
+    console.log(`Password changed for: ${email}`);
+    
+    res.json({ success: true, message: 'Password changed successfully' });
+  } catch (error) {
+    console.error('Password change error:', error);
+    res.status(500).json({ error: 'Password change failed' });
+  }
+});
+
 // Check if user has account
 app.get('/api/has-account/:visitorId', (req, res) => {
   const user = userPixels.get(req.params.visitorId);

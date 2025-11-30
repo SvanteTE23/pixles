@@ -6,9 +6,54 @@ const Stripe = require('stripe');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const admin = require('firebase-admin');
 
 // Load environment variables from .env file
 require('dotenv').config();
+
+// ============ FIREBASE ADMIN SETUP ============
+// Initialize Firebase Admin - you need to provide service account credentials
+// Option 1: Set GOOGLE_APPLICATION_CREDENTIALS environment variable to path of service account JSON
+// Option 2: Put the service account JSON in server/firebase-service-account.json
+const serviceAccountPath = path.join(__dirname, 'firebase-service-account.json');
+
+if (fs.existsSync(serviceAccountPath)) {
+  const serviceAccount = require(serviceAccountPath);
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount)
+  });
+  console.log('✅ Firebase Admin initialized with service account');
+} else if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+  admin.initializeApp({
+    credential: admin.credential.applicationDefault()
+  });
+  console.log('✅ Firebase Admin initialized with application default credentials');
+} else {
+  console.error('⚠️  WARNING: Firebase service account not found!');
+  console.error('   Create a firebase-service-account.json file in the server folder');
+  console.error('   Get it from: Firebase Console > Project Settings > Service Accounts > Generate New Private Key');
+  // Initialize without credentials - will fail on auth verification
+  admin.initializeApp();
+}
+
+// Middleware to verify Firebase token
+const verifyFirebaseToken = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'No token provided' });
+  }
+  
+  const idToken = authHeader.split('Bearer ')[1];
+  
+  try {
+    const decodedToken = await admin.auth().verifyIdToken(idToken);
+    req.firebaseUser = decodedToken;
+    next();
+  } catch (error) {
+    console.error('Token verification error:', error);
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+};
 
 const app = express();
 
@@ -207,35 +252,29 @@ loadCanvas();
 
 // ============ API ROUTES ============
 
-// Register new account
-app.post('/api/register', (req, res) => {
+// Firebase Register - creates server-side account linked to Firebase user
+app.post('/api/firebase-register', verifyFirebaseToken, (req, res) => {
   try {
-    const { email, password, displayName, visitorId } = req.body;
+    const { displayName, visitorId } = req.body;
+    const { uid, email } = req.firebaseUser;
     
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password required' });
+    // Check if Firebase UID already has an account
+    let existingAccount = null;
+    for (const [key, value] of accounts.entries()) {
+      if (value.firebaseUid === uid) {
+        existingAccount = value;
+        break;
+      }
     }
     
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({ error: 'Invalid email format' });
+    if (existingAccount) {
+      return res.status(400).json({ error: 'Account already exists' });
     }
     
-    // Check if email already exists
-    if (accounts.has(email.toLowerCase())) {
-      return res.status(400).json({ error: 'Email already registered' });
-    }
-    
-    // Check password length
-    if (password.length < 6) {
-      return res.status(400).json({ error: 'Password must be at least 6 characters' });
-    }
-    
-    // Create account
+    // Create account linked to Firebase
     const account = {
       email: email.toLowerCase(),
-      passwordHash: hashPassword(password),
+      firebaseUid: uid,
       visitorId: visitorId,
       displayName: displayName || '',
       createdAt: new Date().toISOString()
@@ -247,12 +286,13 @@ app.post('/api/register', (req, res) => {
     const user = getOrCreateUser(visitorId);
     user.hasAccount = true;
     user.email = email.toLowerCase();
+    user.firebaseUid = uid;
     user.displayName = displayName || '';
     
     saveAccounts();
     saveUsers();
     
-    console.log(`New account registered: ${email}`);
+    console.log(`New Firebase account registered: ${email}`);
     
     res.json({ 
       success: true, 
@@ -260,34 +300,55 @@ app.post('/api/register', (req, res) => {
       user: user
     });
   } catch (error) {
-    console.error('Registration error:', error);
+    console.error('Firebase registration error:', error);
     res.status(500).json({ error: 'Registration failed' });
   }
 });
 
-// Login
-app.post('/api/login', (req, res) => {
+// Firebase Login - authenticates via Firebase token
+app.post('/api/firebase-login', verifyFirebaseToken, (req, res) => {
   try {
-    const { email, password, currentVisitorId } = req.body;
+    const { currentVisitorId } = req.body;
+    const { uid, email } = req.firebaseUser;
     
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password required' });
+    // Find account by Firebase UID
+    let account = null;
+    for (const [key, value] of accounts.entries()) {
+      if (value.firebaseUid === uid) {
+        account = value;
+        break;
+      }
     }
     
-    const account = accounts.get(email.toLowerCase());
-    
+    // If no account found, this is a new Firebase user - auto-create account
     if (!account) {
-      return res.status(401).json({ error: 'Invalid email or password' });
-    }
-    
-    if (account.passwordHash !== hashPassword(password)) {
-      return res.status(401).json({ error: 'Invalid email or password' });
+      // Use the current visitor ID for the new account
+      account = {
+        email: email.toLowerCase(),
+        firebaseUid: uid,
+        visitorId: currentVisitorId,
+        displayName: '',
+        createdAt: new Date().toISOString()
+      };
+      
+      accounts.set(email.toLowerCase(), account);
+      
+      // Mark user as having an account
+      const user = getOrCreateUser(currentVisitorId);
+      user.hasAccount = true;
+      user.email = email.toLowerCase();
+      user.firebaseUid = uid;
+      
+      saveAccounts();
+      saveUsers();
+      
+      console.log(`Auto-created account for Firebase user: ${email}`);
     }
     
     // Get the user data associated with this account
     const user = getOrCreateUser(account.visitorId);
     
-    console.log(`User logged in: ${email}`);
+    console.log(`Firebase user logged in: ${email}`);
     
     res.json({ 
       success: true,
@@ -296,54 +357,27 @@ app.post('/api/login', (req, res) => {
       user: user
     });
   } catch (error) {
-    console.error('Login error:', error);
+    console.error('Firebase login error:', error);
     res.status(500).json({ error: 'Login failed' });
   }
 });
 
-// Change password (requires current password for security)
+// Legacy routes - kept for backward compatibility but will fail without password hash
+// These can be removed once all users migrate to Firebase
+
+// Register new account (LEGACY - use /api/firebase-register instead)
+app.post('/api/register', (req, res) => {
+  res.status(410).json({ error: 'Please use Firebase authentication. This endpoint is deprecated.' });
+});
+
+// Login (LEGACY - use /api/firebase-login instead)
+app.post('/api/login', (req, res) => {
+  res.status(410).json({ error: 'Please use Firebase authentication. This endpoint is deprecated.' });
+});
+
+// Change password (LEGACY - password changes are now handled by Firebase)
 app.post('/api/change-password', (req, res) => {
-  try {
-    const { email, currentPassword, newPassword } = req.body;
-    
-    if (!email || !currentPassword || !newPassword) {
-      return res.status(400).json({ error: 'Email, current password, and new password required' });
-    }
-    
-    const account = accounts.get(email.toLowerCase());
-    
-    if (!account) {
-      return res.status(404).json({ error: 'No account found with this email' });
-    }
-    
-    // Verify current password
-    if (account.passwordHash !== hashPassword(currentPassword)) {
-      return res.status(401).json({ error: 'Current password is incorrect' });
-    }
-    
-    // Check new password length
-    if (newPassword.length < 6) {
-      return res.status(400).json({ error: 'New password must be at least 6 characters' });
-    }
-    
-    // Check that new password is different
-    if (currentPassword === newPassword) {
-      return res.status(400).json({ error: 'New password must be different from current password' });
-    }
-    
-    // Update password
-    account.passwordHash = hashPassword(newPassword);
-    account.passwordUpdatedAt = new Date().toISOString();
-    
-    saveAccounts();
-    
-    console.log(`Password changed for: ${email}`);
-    
-    res.json({ success: true, message: 'Password changed successfully' });
-  } catch (error) {
-    console.error('Password change error:', error);
-    res.status(500).json({ error: 'Password change failed' });
-  }
+  res.status(410).json({ error: 'Please use Firebase authentication to change your password.' });
 });
 
 // Check if user has account

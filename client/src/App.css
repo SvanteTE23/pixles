@@ -2412,6 +2412,73 @@ body.dark-mode .cursor-color-picker {
   cursor: not-allowed;
 }
 
+.auth-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  margin: 8px 0;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid #ddd;
+}
+
+.auth-divider span {
+  padding: 0 12px;
+  color: #888;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+body.dark-mode .auth-divider::before,
+body.dark-mode .auth-divider::after {
+  border-color: #444;
+}
+
+body.dark-mode .auth-divider span {
+  color: #666;
+}
+
+.google-signin-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  background: white;
+  color: #333;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.google-signin-btn:hover:not(:disabled) {
+  background: #f5f5f5;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.google-signin-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+body.dark-mode .google-signin-btn {
+  background: #2a2a3a;
+  border-color: #444;
+  color: #eee;
+}
+
+body.dark-mode .google-signin-btn:hover:not(:disabled) {
+  background: #3a3a4a;
+}
+
 .auth-switch {
   text-align: center;
   font-size: 13px;

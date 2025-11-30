@@ -5,7 +5,7 @@ import { PixelIcon } from './PixelIcons';
 
 const CANVAS_SIZE = 1000; // Must match server
 const PIXEL_SIZE = 4; // Size of each pixel in visual px
-const SERVER_URL = `http://${window.location.hostname}:3001`;
+const SERVER_URL = `http://${window.location.hostname}:8420`;
 const MAX_PIXELS = 10;
 const REFILL_TIME = 4 * 60 * 60 * 1000; // 4 hours in milliseconds
 

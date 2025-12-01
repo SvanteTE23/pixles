@@ -499,16 +499,23 @@ function App() {
     return pixels;
   };
   
-  // Get pixels in a circle (Midpoint circle algorithm)
+  // Get pixels in a circle (optimized filled circle)
   const getCirclePixels = (cx, cy, endX, endY) => {
-    const radius = Math.round(Math.sqrt(Math.pow(endX - cx, 2) + Math.pow(endY - cy, 2)));
-    const pixels = [];
+    const radius = Math.round(Math.sqrt((endX - cx) ** 2 + (endY - cy) ** 2));
+    if (radius === 0) return [{ x: cx, y: cy }];
     
-    for (let y = -radius; y <= radius; y++) {
-      for (let x = -radius; x <= radius; x++) {
-        if (x * x + y * y <= radius * radius) {
-          pixels.push({ x: cx + x, y: cy + y });
-        }
+    const pixels = [];
+    const radiusSq = radius * radius;
+    
+    // Use horizontal scanlines - only iterate necessary rows
+    for (let dy = -radius; dy <= radius; dy++) {
+      const rowY = cy + dy;
+      // Calculate x extent for this row using circle equation
+      const dySq = dy * dy;
+      const xExtent = Math.floor(Math.sqrt(radiusSq - dySq));
+      
+      for (let dx = -xExtent; dx <= xExtent; dx++) {
+        pixels.push({ x: cx + dx, y: rowY });
       }
     }
     return pixels;
@@ -1727,8 +1734,8 @@ function App() {
                   <rect x="3" y="2" width="2" height="1" fill={cursorFill}/>
                   <rect x="2" y="3" width="1" height="2" fill={cursorFill}/>
                 </svg>
-                {/* Hide cursor names on mobile for performance */}
-                {!isMobile && cursor.name && (
+                {/* Show cursor names - simplified on mobile */}
+                {cursor.name && (
                   <div 
                     className={`cursor-name ${hasRainbow ? 'rainbow-text' : ''}`}
                     style={{ 
@@ -1736,7 +1743,7 @@ function App() {
                       transform: `translateX(-50%) scale(${1/zoom})`
                     }}
                   >
-                    {cursor.cosmetics?.includes('vip') && <span className="vip-badge"><PixelIcon name="crown" size={10} color="#FFD700" /></span>}
+                    {cursor.cosmetics?.includes('vip') && <span className="vip-badge"><PixelIcon name="crown" size={isMobile ? 8 : 10} color="#FFD700" /></span>}
                     {cursor.name}
                   </div>
                 )}

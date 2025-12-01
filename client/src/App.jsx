@@ -371,11 +371,24 @@ function App() {
       
       // Handle both old and new format
       const grid = data.canvas || data;
+      const effects = data.pixelEffects || {};
+      
       grid.forEach((row, y) => {
         row.forEach((color, x) => {
           if (color) {
+            const key = `${x},${y}`;
+            const pixelEffects = effects[key];
+            
             ctx.fillStyle = color;
             ctx.fillRect(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE);
+            
+            // Draw glow effect if pixel has it
+            if (pixelEffects?.glow) {
+              ctx.shadowColor = color;
+              ctx.shadowBlur = 4;
+              ctx.fillRect(x * PIXEL_SIZE, y * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE);
+              ctx.shadowBlur = 0;
+            }
           }
         });
       });
@@ -1842,22 +1855,24 @@ function App() {
                   setActivePaletteIndex(index);
                 }}
               />
-              <button 
-                className="remove-color-btn"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const newPalette = palette.filter((_, i) => i !== index);
-                  setPalette(newPalette);
-                  if (activePaletteIndex === index) {
-                    setActivePaletteIndex(0);
-                    if (newPalette.length > 0) setSelectedColor(newPalette[0]);
-                  } else if (activePaletteIndex > index) {
-                    setActivePaletteIndex(activePaletteIndex - 1);
-                  }
-                }}
-              >
-                ×
-              </button>
+              {activePaletteIndex === index && (
+                <button 
+                  className="remove-color-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const newPalette = palette.filter((_, i) => i !== index);
+                    setPalette(newPalette);
+                    if (activePaletteIndex === index) {
+                      setActivePaletteIndex(0);
+                      if (newPalette.length > 0) setSelectedColor(newPalette[0]);
+                    } else if (activePaletteIndex > index) {
+                      setActivePaletteIndex(activePaletteIndex - 1);
+                    }
+                  }}
+                >
+                  ×
+                </button>
+              )}
             </div>
           ))}
         </div>

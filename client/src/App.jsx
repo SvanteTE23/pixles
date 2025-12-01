@@ -190,6 +190,12 @@ function App() {
     startTouchPos: null,
     lastTouchPos: null
   });
+  
+  // MOBILE: Refs for batching transform updates to prevent flickering
+  const mobileTransformRef = useRef({ zoom: 1, x: 0, y: 0 });
+  const mobileRafId = useRef(null);
+  const lastMobileUpdate = useRef(0);
+  const MOBILE_UPDATE_INTERVAL = 16; // ~60fps max
 
   const canvasRef = useRef(null);
   const socketRef = useRef(null);
@@ -307,8 +313,11 @@ function App() {
         current.x += xDiff * t;
         current.y += yDiff * t;
 
-        setZoom(current.zoom);
-        setOffset({ x: current.x, y: current.y });
+        // Batch state updates to reduce re-renders
+        const newZoom = current.zoom;
+        const newOffset = { x: current.x, y: current.y };
+        setZoom(newZoom);
+        setOffset(newOffset);
         
         animationFrameId = requestAnimationFrame(animate);
       } else {
@@ -354,6 +363,7 @@ function App() {
     setOffset({ x: startX, y: startY });
     targetTransform.current = { zoom: fitZoom, x: startX, y: startY };
     currentTransform.current = { zoom: fitZoom, x: startX, y: startY };
+    mobileTransformRef.current = { zoom: fitZoom, x: startX, y: startY };
 
     // Connect to server
     socketRef.current = io(SERVER_URL);
@@ -851,6 +861,18 @@ function App() {
     }
   };
 
+  // MOBILE: Batch state updates using RAF to prevent flickering
+  const scheduleMobileUpdate = () => {
+    if (mobileRafId.current) return; // Already scheduled
+    
+    mobileRafId.current = requestAnimationFrame(() => {
+      mobileRafId.current = null;
+      const t = mobileTransformRef.current;
+      setZoom(t.zoom);
+      setOffset({ x: t.x, y: t.y });
+    });
+  };
+
   const handleTouchMove = (e) => {
     e.preventDefault(); // Prevent scrolling
 
@@ -877,10 +899,13 @@ function App() {
       const newOffsetX = relCenterX - worldX * newZoom + dx;
       const newOffsetY = relCenterY - worldY * newZoom + dy;
 
+      // Update refs immediately
       targetTransform.current = { zoom: newZoom, x: newOffsetX, y: newOffsetY };
+      currentTransform.current = { zoom: newZoom, x: newOffsetX, y: newOffsetY };
+      mobileTransformRef.current = { zoom: newZoom, x: newOffsetX, y: newOffsetY };
       
-      // Trigger animation for pinch zoom
-      if (window.startCanvasAnimation) window.startCanvasAnimation();
+      // MOBILE: Batch state updates via RAF to prevent flickering
+      scheduleMobileUpdate();
       
       touchState.current.lastDist = dist;
       touchState.current.lastCenter = center;
@@ -893,13 +918,16 @@ function App() {
         touchState.current.hasMoved = true;
       }
 
+      // Update refs immediately
       targetTransform.current.x += dx;
       targetTransform.current.y += dy;
-      
-      // Instant update for responsiveness
       currentTransform.current.x += dx;
       currentTransform.current.y += dy;
-      setOffset({ x: currentTransform.current.x, y: currentTransform.current.y });
+      mobileTransformRef.current.x = currentTransform.current.x;
+      mobileTransformRef.current.y = currentTransform.current.y;
+      
+      // MOBILE: Batch state updates via RAF to prevent flickering
+      scheduleMobileUpdate();
 
       touchState.current.lastTouchPos = { x: e.touches[0].clientX, y: e.touches[0].clientY };
     }
@@ -1002,7 +1030,11 @@ function App() {
       const y = Math.floor((e.clientY - rect.top) * scaleY / PIXEL_SIZE);
 
       if (x >= 0 && x < CANVAS_SIZE && y >= 0 && y < CANVAS_SIZE) {
-        setHoveredPixel({ x, y });
+        // Only update if pixel changed to reduce re-renders
+        setHoveredPixel(prev => {
+          if (prev && prev.x === x && prev.y === y) return prev;
+          return { x, y };
+        });
         
         // Update preview for bombs
         if (activeTool === TOOLS.BOMB_5 || activeTool === TOOLS.BOMB_10) {
@@ -1011,7 +1043,7 @@ function App() {
         } else if (activeTool === TOOLS.BRUSH && !isDrawing.current) {
           setPreviewPixels(getBrushPixels(x, y));
         } else if (!isDrawing.current && ![TOOLS.LINE, TOOLS.RECTANGLE, TOOLS.CIRCLE].includes(activeTool)) {
-          setPreviewPixels([]);
+          if (previewPixels.length > 0) setPreviewPixels([]);
         }
         
         // Emit cursor position (throttled)
@@ -1625,9 +1657,11 @@ function App() {
         onContextMenu={(e) => e.preventDefault()} // Prevent context menu
       >
         <div 
-          className="canvas-wrapper"
+          className={`canvas-wrapper ${isMobile ? 'canvas-wrapper-mobile' : 'canvas-wrapper-desktop'}`}
           style={{ 
-            transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
+            transform: isMobile 
+              ? `translate3d(${offset.x}px, ${offset.y}px, 0) scale(${zoom})`
+              : `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
             width: CANVAS_SIZE * PIXEL_SIZE,
             height: CANVAS_SIZE * PIXEL_SIZE
           }}
@@ -1643,6 +1677,7 @@ function App() {
               cursor: isEyedropperActive ? 'copy' : 'crosshair'
             }}
           />
+          {/* Grid overlay - CSS handles mobile/desktop differences */}
           {zoom > 4 && (
             <div 
               className="grid-overlay"
@@ -1660,11 +1695,12 @@ function App() {
                 pointerEvents: 'none',
                 zIndex: 3,
                 opacity: Math.min((zoom - 4) / 2, 1),
-                transition: 'opacity 0.2s'
+                transition: 'opacity 0.2s ease-out'
               }}
             />
           )}
-          {zoom > 1.5 && animatingPixels.map(p => (
+          {/* DESKTOP ONLY: Pixel animations - disabled on mobile for performance */}
+          {!isMobile && zoom > 1.5 && animatingPixels.map(p => (
             <div
               key={p.id}
               className="pixel-place-animation"
@@ -1734,8 +1770,8 @@ function App() {
                   <rect x="3" y="2" width="2" height="1" fill={cursorFill}/>
                   <rect x="2" y="3" width="1" height="2" fill={cursorFill}/>
                 </svg>
-                {/* Show cursor names - simplified on mobile */}
-                {cursor.name && (
+                {/* DESKTOP: Show full cursor names, MOBILE: Hide names for performance */}
+                {!isMobile && cursor.name && (
                   <div 
                     className={`cursor-name ${hasRainbow ? 'rainbow-text' : ''}`}
                     style={{ 
@@ -1743,7 +1779,7 @@ function App() {
                       transform: `translateX(-50%) scale(${1/zoom})`
                     }}
                   >
-                    {cursor.cosmetics?.includes('vip') && <span className="vip-badge"><PixelIcon name="crown" size={isMobile ? 8 : 10} color="#FFD700" /></span>}
+                    {cursor.cosmetics?.includes('vip') && <span className="vip-badge"><PixelIcon name="crown" size={10} color="#FFD700" /></span>}
                     {cursor.name}
                   </div>
                 )}
@@ -2157,29 +2193,29 @@ function App() {
                   <div className="shop-packages">
                     <button className="package-btn" onClick={() => purchaseItem('pixels_10')} disabled={isLoadingPurchase}>
                       <span className="package-pixels">10 Pixels</span>
-                      <span className="package-price">5 kr</span>
+                      <span className="package-price">€0.49</span>
                     </button>
                     <button className="package-btn" onClick={() => purchaseItem('pixels_50')} disabled={isLoadingPurchase}>
                       <span className="package-pixels">50 Pixels</span>
-                      <span className="package-price">20 kr</span>
+                      <span className="package-price">€1.99</span>
                       <span className="package-savings">Save 20%</span>
                     </button>
                     <button className="package-btn popular" onClick={() => purchaseItem('pixels_150')} disabled={isLoadingPurchase}>
                       <span className="package-badge">Popular!</span>
                       <span className="package-pixels">150 Pixels</span>
-                      <span className="package-price">45 kr</span>
+                      <span className="package-price">€4.49</span>
                       <span className="package-savings">Save 40%</span>
                     </button>
                     <button className="package-btn best-value" onClick={() => purchaseItem('pixels_500')} disabled={isLoadingPurchase}>
                       <span className="package-badge">Best value!</span>
                       <span className="package-pixels">500 Pixels</span>
-                      <span className="package-price">125 kr</span>
+                      <span className="package-price">€11.99</span>
                       <span className="package-savings">Save 50%</span>
                     </button>
                     <button className="package-btn mega" onClick={() => purchaseItem('pixels_1000')} disabled={isLoadingPurchase}>
                       <span className="package-badge"><PixelIcon name="fire" size={12} /> MEGA!</span>
                       <span className="package-pixels">1000 Pixels</span>
-                      <span className="package-price">200 kr</span>
+                      <span className="package-price">€18.99</span>
                       <span className="package-savings">Save 60%</span>
                     </button>
                   </div>
@@ -2195,19 +2231,19 @@ function App() {
                       <span className="package-emoji"><PixelIcon name="bomb" size={24} /></span>
                       <span className="package-pixels">Pixel Bomb 5×5</span>
                       <span className="package-desc">Fill a 5×5 area instantly!</span>
-                      <span className="package-price">25 kr</span>
+                      <span className="package-price">€2.49</span>
                     </button>
                     <button className="package-btn bomb" onClick={() => purchaseItem('bomb_10x10')} disabled={isLoadingPurchase}>
                       <span className="package-emoji"><PixelIcon name="bomb" size={24} /></span>
                       <span className="package-pixels">Pixel Bomb 10×10</span>
                       <span className="package-desc">Fill a 10×10 area instantly!</span>
-                      <span className="package-price">50 kr</span>
+                      <span className="package-price">€4.99</span>
                     </button>
                     <button className="package-btn wipe" onClick={() => purchaseItem('canvas_wipe')} disabled={isLoadingPurchase}>
                       <span className="package-emoji"><PixelIcon name="broom" size={24} /></span>
                       <span className="package-pixels">Canvas Wipe</span>
                       <span className="package-desc">Clear the ENTIRE canvas!</span>
-                      <span className="package-price">500 kr</span>
+                      <span className="package-price">€49.99</span>
                     </button>
                   </div>
                 </>
@@ -2226,7 +2262,7 @@ function App() {
                       <span className="package-emoji"><PixelIcon name="brush" size={24} /></span>
                       <span className="package-pixels">Brush 3×3</span>
                       <span className="package-desc">Paint 3×3 pixels at once</span>
-                      <span className="package-price">{userData.tools.includes('brush') ? '✓ Owned' : '15 kr'}</span>
+                      <span className="package-price">{userData.tools.includes('brush') ? '✓ Owned' : '€1.49'}</span>
                     </button>
                     <button 
                       className={`package-btn tool ${userData.tools.includes('line') ? 'owned' : ''}`} 
@@ -2236,7 +2272,7 @@ function App() {
                       <span className="package-emoji"><PixelIcon name="line" size={24} /></span>
                       <span className="package-pixels">Line Tool</span>
                       <span className="package-desc">Draw straight lines easily</span>
-                      <span className="package-price">{userData.tools.includes('line') ? '✓ Owned' : '20 kr'}</span>
+                      <span className="package-price">{userData.tools.includes('line') ? '✓ Owned' : '€1.99'}</span>
                     </button>
                     <button 
                       className={`package-btn tool ${userData.tools.includes('rectangle') ? 'owned' : ''}`} 
@@ -2246,7 +2282,7 @@ function App() {
                       <span className="package-emoji"><PixelIcon name="rectangle" size={24} /></span>
                       <span className="package-pixels">Rectangle Tool</span>
                       <span className="package-desc">Draw rectangles and squares</span>
-                      <span className="package-price">{userData.tools.includes('rectangle') ? '✓ Owned' : '25 kr'}</span>
+                      <span className="package-price">{userData.tools.includes('rectangle') ? '✓ Owned' : '€2.49'}</span>
                     </button>
                     <button 
                       className={`package-btn tool ${userData.tools.includes('circle') ? 'owned' : ''}`} 
@@ -2256,7 +2292,7 @@ function App() {
                       <span className="package-emoji"><PixelIcon name="circle" size={24} /></span>
                       <span className="package-pixels">Circle Tool</span>
                       <span className="package-desc">Draw circles of any size</span>
-                      <span className="package-price">{userData.tools.includes('circle') ? '✓ Owned' : '30 kr'}</span>
+                      <span className="package-price">{userData.tools.includes('circle') ? '✓ Owned' : '€2.99'}</span>
                     </button>
                   </div>
                 </>
@@ -2275,7 +2311,7 @@ function App() {
                       <span className="package-emoji"><PixelIcon name="sparkle" size={24} /></span>
                       <span className="package-pixels">Glow Effect</span>
                       <span className="package-desc">Your pixels glow and stand out</span>
-                      <span className="package-price">{userData.cosmetics.includes('glow') ? '✓ Owned' : '20 kr'}</span>
+                      <span className="package-price">{userData.cosmetics.includes('glow') ? '✓ Owned' : '€1.99'}</span>
                     </button>
                     <button 
                       className={`package-btn cosmetic ${userData.cosmetics.includes('vip') ? 'owned' : ''}`} 
@@ -2285,7 +2321,7 @@ function App() {
                       <span className="package-emoji"><PixelIcon name="crown" size={24} color="#FFD700" /></span>
                       <span className="package-pixels">VIP Badge</span>
                       <span className="package-desc">Show off your VIP status</span>
-                      <span className="package-price">{userData.cosmetics.includes('vip') ? '✓ Owned' : '50 kr'}</span>
+                      <span className="package-price">{userData.cosmetics.includes('vip') ? '✓ Owned' : '€4.99'}</span>
                     </button>
                     <button 
                       className={`package-btn cosmetic ${userData.cosmetics.includes('customCursor') ? 'owned' : ''}`} 
@@ -2295,7 +2331,7 @@ function App() {
                       <span className="package-emoji"><PixelIcon name="target" size={24} /></span>
                       <span className="package-pixels">Custom Cursor</span>
                       <span className="package-desc">Choose your own cursor color</span>
-                      <span className="package-price">{userData.cosmetics.includes('customCursor') ? '✓ Owned' : '15 kr'}</span>
+                      <span className="package-price">{userData.cosmetics.includes('customCursor') ? '✓ Owned' : '€1.49'}</span>
                     </button>
                     
                     {/* Custom cursor color picker */}

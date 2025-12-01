@@ -10,15 +10,24 @@
   -webkit-transform: translateZ(0);
 }
 
-/* Disable animations on mobile for performance */
-@media (max-width: 768px) {
-  *, *::before, *::after {
-    animation-duration: 0.1s !important;
-    transition-duration: 0.1s !important;
-  }
-  
+/* ===========================================
+   MOBILE-SPECIFIC OPTIMIZATIONS
+   These styles ONLY affect mobile devices
+   =========================================== */
+@media (max-width: 768px), (pointer: coarse) {
+  /* Disable heavy animations on mobile */
   .pixel-place-animation {
     display: none !important;
+  }
+  
+  /* Remove cursor transitions on mobile */
+  .other-cursor {
+    transition: none !important;
+  }
+  
+  /* Mobile grid - keep transition, works fine */
+  .grid-overlay {
+    /* No overrides needed - inline styles handle everything */
   }
 }
 
@@ -143,20 +152,50 @@ body.dark-mode .app-container {
   cursor: grab;
   background-color: #e5e5e5;
   touch-action: none; /* Prevent browser handling of gestures */
+  /* Prevent flickering on mobile */
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: none;
 }
 
 .viewport:active {
   cursor: grabbing;
 }
 
+/* ===========================================
+   CANVAS WRAPPER - BASE STYLES
+   =========================================== */
 .canvas-wrapper {
   position: absolute;
   top: 0;
   left: 0;
   transform-origin: 0 0;
-  box-shadow: 0 0 20px rgba(0,0,0,0.2);
   background: white;
-  /* transition: transform 0.1s ease-out; Remove transition for instant zoom response */
+}
+
+/* ===========================================
+   DESKTOP CANVAS - Full features, animations
+   =========================================== */
+.canvas-wrapper-desktop {
+  box-shadow: 0 0 20px rgba(0,0,0,0.2);
+}
+
+/* ===========================================
+   MOBILE CANVAS - Optimized for performance
+   =========================================== */
+.canvas-wrapper-mobile {
+  /* GPU acceleration for smooth transforms */
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  /* Force GPU layer */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  /* Simpler shadow for performance */
+  box-shadow: none;
+  /* Contain layout to prevent repaints affecting other elements */
+  contain: strict;
+  /* Prevent any paint during transforms */
+  isolation: isolate;
 }
 
 .pixel-canvas {
@@ -167,6 +206,8 @@ body.dark-mode .app-container {
   top: 0;
   left: 0;
   z-index: 2;
+  /* GPU acceleration for canvas */
+  will-change: contents;
 }
 
 .color-preset-wrapper {
@@ -1367,7 +1408,7 @@ body.dark-mode .add-color-btn:hover {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: 10000; /* Higher than mobile controls-bar (9999) */
 }
 
 .shop-modal {

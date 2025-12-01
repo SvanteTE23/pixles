@@ -187,28 +187,28 @@ const accounts = new Map(); // email -> { passwordHash, visitorId, displayName, 
 
 // ============ PRODUCT CATALOG ============
 const PRODUCTS = {
-  // Pixel Packages
-  pixels_10: { type: 'pixels', amount: 10, price: 500, name: '10 Pixels' },
-  pixels_50: { type: 'pixels', amount: 50, price: 2000, name: '50 Pixels', badge: 'Save 20%' },
-  pixels_150: { type: 'pixels', amount: 150, price: 4500, name: '150 Pixels', badge: 'Popular!' },
-  pixels_500: { type: 'pixels', amount: 500, price: 12500, name: '500 Pixels', badge: 'Best Value!' },
-  pixels_1000: { type: 'pixels', amount: 1000, price: 20000, name: '1000 Pixels', badge: '🔥 MEGA!' },
+  // Pixel Packages (prices in EUR cents)
+  pixels_10: { type: 'pixels', amount: 10, price: 49, name: '10 Pixels' },
+  pixels_50: { type: 'pixels', amount: 50, price: 199, name: '50 Pixels', badge: 'Save 20%' },
+  pixels_150: { type: 'pixels', amount: 150, price: 449, name: '150 Pixels', badge: 'Popular!' },
+  pixels_500: { type: 'pixels', amount: 500, price: 1199, name: '500 Pixels', badge: 'Best Value!' },
+  pixels_1000: { type: 'pixels', amount: 1000, price: 1899, name: '1000 Pixels', badge: '🔥 MEGA!' },
   
   // Power-ups
-  bomb_5x5: { type: 'powerup', powerup: 'bomb', size: 5, price: 2500, name: 'Pixel Bomb 5×5', desc: 'Fill a 5×5 area instantly!' },
-  bomb_10x10: { type: 'powerup', powerup: 'bomb', size: 10, price: 5000, name: 'Pixel Bomb 10×10', desc: 'Fill a 10×10 area instantly!' },
-  canvas_wipe: { type: 'powerup', powerup: 'wipe', price: 50000, name: '🧹 Canvas Wipe', desc: 'Clear the ENTIRE canvas!' },
+  bomb_5x5: { type: 'powerup', powerup: 'bomb', size: 5, price: 249, name: 'Pixel Bomb 5×5', desc: 'Fill a 5×5 area instantly!' },
+  bomb_10x10: { type: 'powerup', powerup: 'bomb', size: 10, price: 499, name: 'Pixel Bomb 10×10', desc: 'Fill a 10×10 area instantly!' },
+  canvas_wipe: { type: 'powerup', powerup: 'wipe', price: 4999, name: '🧹 Canvas Wipe', desc: 'Clear the ENTIRE canvas!' },
   
   // Tools (one-time unlock)
-  tool_line: { type: 'tool', tool: 'line', price: 2000, name: '📏 Line Tool', desc: 'Draw straight lines easily' },
-  tool_rect: { type: 'tool', tool: 'rectangle', price: 2500, name: '⬜ Rectangle Tool', desc: 'Draw rectangles and squares' },
-  tool_circle: { type: 'tool', tool: 'circle', price: 3000, name: '⭕ Circle Tool', desc: 'Draw circles of any size' },
-  tool_brush: { type: 'tool', tool: 'brush', price: 1500, name: '🖌️ Brush 3×3', desc: 'Paint 3×3 pixels at once' },
+  tool_line: { type: 'tool', tool: 'line', price: 199, name: '📏 Line Tool', desc: 'Draw straight lines easily' },
+  tool_rect: { type: 'tool', tool: 'rectangle', price: 249, name: '⬜ Rectangle Tool', desc: 'Draw rectangles and squares' },
+  tool_circle: { type: 'tool', tool: 'circle', price: 299, name: '⭕ Circle Tool', desc: 'Draw circles of any size' },
+  tool_brush: { type: 'tool', tool: 'brush', price: 149, name: '🖌️ Brush 3×3', desc: 'Paint 3×3 pixels at once' },
   
   // Cosmetics
-  glow_effect: { type: 'cosmetic', cosmetic: 'glow', price: 2000, name: '✨ Glow Effect', desc: 'Your pixels glow and stand out' },
-  vip_badge: { type: 'cosmetic', cosmetic: 'vip', price: 5000, name: '👑 VIP Badge', desc: 'Show off your VIP status' },
-  custom_cursor: { type: 'cosmetic', cosmetic: 'customCursor', price: 1500, name: '🎯 Custom Cursor', desc: 'Choose your own cursor color' },
+  glow_effect: { type: 'cosmetic', cosmetic: 'glow', price: 199, name: '✨ Glow Effect', desc: 'Your pixels glow and stand out' },
+  vip_badge: { type: 'cosmetic', cosmetic: 'vip', price: 499, name: '👑 VIP Badge', desc: 'Show off your VIP status' },
+  custom_cursor: { type: 'cosmetic', cosmetic: 'customCursor', price: 149, name: '🎯 Custom Cursor', desc: 'Choose your own cursor color' },
 };
 
 // ============ CANVAS ============
@@ -412,7 +412,7 @@ app.post('/api/create-checkout-session', async (req, res) => {
       payment_method_types: ['card'],
       line_items: [{
         price_data: {
-          currency: 'sek',
+          currency: 'eur',
           product_data: {
             name: product.name,
             description: product.desc || `Purchase for Pixles canvas`,
